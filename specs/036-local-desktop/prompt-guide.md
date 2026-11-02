@@ -23,13 +23,17 @@ repository's normal quality, security, or review gates.
 
 ## How to use
 
-1. Continue on the existing `036-local-desktop` feature branch. Do not create a
-   second feature branch or repeat completed prompts.
+1. Use one branch per prompt step. Name implementation branches
+   `036-local-desktop-prompt-<number>-<short-description>` and base each new
+   branch on the latest `main` after the previous prompt's PR has merged. Do
+   not continue work on a branch used for an earlier prompt.
 2. Paste the prompts below one at a time, replacing bracketed values when
    needed.
-3. After each completed prompt, commit and push that step, then stop for the
-   user's review and approval before starting the next prompt. Prompt 1 is
-   read-only and does not require a commit by itself.
+3. For each prompt, create its branch before starting. After a step that
+   changes files, commit and push that branch, open a PR to `main`, and stop
+   for the user's review and approval. Merge the approved PR before creating
+   the next prompt's branch. A read-only prompt may use its own branch but
+   needs no commit or PR if it changes no files.
 4. Do not start implementation until the user approves the spec, architecture,
    security boundaries, and local runtime feasibility gates.
 5. If a tool rejects a file edit, stop and ask before retrying the same edit.
