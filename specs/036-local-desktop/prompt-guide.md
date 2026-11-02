@@ -167,7 +167,7 @@ Docker runtime, local model server, provider credentials) explicitly. Do not
 create implementation code.
 ```
 
-## Prompt 6 — Check spec/plan/task consistency
+## Prompt 6 — Check spec/plan/task consistency (completed; corrections applied)
 
 ```text
 Use /speckit.analyze on the Native Local SAM Desktop spec, plan, and tasks.
@@ -182,6 +182,11 @@ Windows-only and local single-user operation. Report gaps with artifact and
 section references. Do not edit code; propose the smallest spec/plan/task
 corrections and apply only after I approve them.
 ```
+
+Prompt 6 completed read-only analysis and user-approved corrections. The
+remaining implementation-blocking product decisions are explicit gates in
+`tasks.md`; the technical runtime, shell/credential-store, and network gates
+must still pass before product implementation.
 
 ## Prompt 7 — Implement the approved plan
 
@@ -220,11 +225,16 @@ On a clean supported Windows environment:
    cloud provider was not.
 5. Switch to a configured cloud model and verify its selected provider is
    called instead; verify the local endpoint is not used for that task.
-6. Exercise unreachable local-model, missing workspace runtime, app restart
+6. Configure two supported agents with different destinations and verify their
+   requests remain isolated to their individual selections.
+7. Exercise unreachable local-model, missing workspace runtime, app restart
    during work, and workspace cleanup cases. Confirm truthful errors and no
    orphaned resources.
-7. Close/reopen the app and verify required local state persists.
-8. Confirm the local control interface is not reachable from another LAN
+8. After installing prerequisites and downloading local model/workspace
+   assets, disable outbound internet and verify a complete local project-to-
+   agent-response flow still succeeds.
+9. Close/reopen the app and verify required local state persists.
+10. Confirm the local control interface is not reachable from another LAN
    device by default and confirm credentials are not exposed in logs.
 
 Record the app version, Windows version, workspace-runtime version, local model

@@ -110,6 +110,8 @@ Reuse the existing project-scoped chat/session and message concepts stored by `P
 
 Credential removal deletes the protected entry and its references without deleting project, conversation, or workspace data.
 
+Credential creation and updates must pass through the trusted desktop credential-store boundary. Secret values are never written to the local database, returned to the renderer after saving, injected into workspace settings, or included in logs; only opaque references may cross the local API.
+
 ## Cross-Entity Invariants
 
 1. A local API request resolves the authenticated principal server-side; caller-provided IDs do not authorize access.

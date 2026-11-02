@@ -9,6 +9,7 @@
 - If the packaged Worker runtime cannot provide durable local bindings without Cloudflare credentials, stop and obtain approval for a Node/SQLite adapter design before continuing.
 - If the Electron or credential-storage feasibility check requires another shell or trust model, stop for owner approval before adding dependencies or storing credentials.
 - If the Docker-to-model path cannot stay private while preserving supported nested-Docker workflows, stop for an approved security/architecture change. Never tell users to expose Ollama to the LAN or publish the Docker API.
+- Before T004, record owner decisions for local-folder-first project creation and whether the platform-managed `sam` inference proxy is part of the local desktop's supported cloud destinations. Do not silently decide either scope question.
 - External prerequisites: Windows runner, WSL2, Docker Desktop with Linux containers, Ollama with a downloaded test model, a second LAN device for negative network checks, and credentials for one supported cloud provider. Keep live tests bounded and remove only test-created resources.
 
 ## Phase 1: Setup and Feasibility Gates
@@ -26,7 +27,7 @@
 - [ ] T004 Create and register the Windows desktop package in `apps/desktop/package.json`, `pnpm-workspace.yaml`, and `turbo.json` using only the shell and runtime choices approved after T001-T003.
 - [ ] T005 [P] Add runtime-boundary tests in `apps/api/tests/unit/local-mode/runtime-boundary.test.ts` proving local requests do not invoke Cloudflare APIs, Workers AI, remote VM providers, or scheduled handlers.
 - [ ] T006 Implement the explicit local runtime boundary in `apps/api/src/local/runtime-mode.ts` and `apps/api/src/index.ts`; keep hosted defaults and identity checks unchanged, and fail closed when a local-only operation reaches a cloud-only dependency.
-- [ ] T007 [P] Add restart, migration, and backup tests for local D1/KV/ProjectData state in `apps/api/tests/integration/local-state-persistence.test.ts`, including preservation of the prior data copy after a failed migration.
+- [ ] T007 [P] Add restart and local-store migration/backup tests for D1/KV/ProjectData state in `apps/api/tests/integration/local-state-persistence.test.ts`; verify a failed migration or disk-full write preserves the prior usable data copy. Keep packaged-version upgrade behavior in T032.
 - [ ] T008 Implement app-owned data-directory selection and versioned local persistence startup in `apps/desktop/src/main/local-data.ts` and `apps/api/src/local/persistence.ts`; never derive the data directory from the repository path.
 - [ ] T009 [P] Add local-principal and ownership tests in `apps/api/tests/integration/local-auth-ownership.test.ts`, including rejection of renderer-supplied user identities and cross-project resource access.
 - [ ] T010 Implement server-validated local principal/session authentication in `apps/api/src/auth/local-auth.ts` and `apps/api/src/routes/local-auth.ts`; preserve project/workspace ownership checks and keep session secrets out of renderer storage and logs.
@@ -37,7 +38,7 @@
 
 **Independent Test**: On a clean supported Windows profile, launch the packaged app, create/open a local project, restart SAM, and verify the project remains available without hosted authentication.
 
-- [ ] T011 [P] [US1] Add a packaged first-run and project-persistence test in `apps/desktop/tests/e2e/first-run.spec.ts`; verify no Cloudflare account is required and project data survives a full app restart.
+- [ ] T011 [P] [US1] Add a packaged first-run and project-persistence test in `apps/desktop/tests/e2e/first-run.spec.ts`; verify no Cloudflare account is required, project data survives a full app restart, and launch-to-project creation completes within five minutes on the documented Windows baseline.
 - [ ] T012 [P] [US1] Add active-work close-choice tests in `apps/desktop/tests/e2e/close-behavior.spec.ts`; verify graceful stop is the default and explicit background operation remains visibly active.
 - [ ] T013 [US1] Implement the desktop main-process window, local-service startup/shutdown supervision, and narrow typed IPC in `apps/desktop/src/main/index.ts`, `apps/desktop/src/main/service-supervisor.ts`, and `apps/desktop/src/preload/index.ts`.
 - [ ] T014 [US1] Add local prerequisite and runtime-health reporting in `apps/api/src/routes/local-health.ts` and `apps/web/src/pages/Setup.tsx`; report Docker/WSL2 and local-store state without exposing secret values or opening a non-loopback control listener.
@@ -50,9 +51,9 @@
 
 **Independent Test**: From the packaged app, create a local project and workspace, run OpenCode against a real local Ollama model, observe streamed output in the correct conversation, stop/delete the workspace, and confirm only SAM-labeled resources changed.
 
-- [ ] T017 [P] [US2] Add Docker lifecycle integration tests in `apps/desktop/tests/integration/docker-lifecycle.test.ts` for create/start/stop/restart/delete, missing Docker/WSL2 errors, labels, and truthful cleanup status.
+- [ ] T017 [P] [US2] Add Docker lifecycle integration tests in `apps/desktop/tests/integration/docker-lifecycle.test.ts` for create/start/stop/restart/delete, missing Docker/WSL2 and insufficient-disk errors, labels, and truthful cleanup status.
 - [ ] T018 [P] [US2] Add a real devcontainer compatibility test in `apps/desktop/tests/integration/nested-docker.test.ts`; prove supported repository settings and nested-Docker workflows remain available inside Docker Desktop's WSL2 VM without publishing the Docker API.
-- [ ] T019 [P] [US2] Add the first vertical-slice test in `apps/desktop/tests/e2e/local-first-agent.spec.ts`; exercise packaged launch -> local project -> workspace -> OpenCode -> Ollama -> streamed conversation, with cloud endpoints instrumented to assert zero requests.
+- [ ] T019 [P] [US2] Add the first vertical-slice test in `apps/desktop/tests/e2e/local-first-agent.spec.ts`; exercise packaged launch -> local project -> workspace -> OpenCode -> Ollama -> streamed conversation, with cloud endpoints instrumented to assert zero requests. After installing prerequisites and downloading the model/image, repeat the local flow with outbound internet disabled.
 - [ ] T020 [US2] Implement the Docker Desktop workspace lifecycle adapter in `apps/desktop/src/main/workspaces/docker-desktop.ts`; use installation/workspace labels for recovery and mutation, and never prune unrelated Docker resources.
 - [ ] T021 [US2] Add the local VM Agent launch path in `packages/vm-agent/internal/server/local_workspace.go` and its Go tests; reuse ACP/session behavior while preserving supported devcontainer settings and the Docker Desktop WSL2 security boundary.
 - [ ] T022 [US2] Connect local agent output to the canonical project/chat session in `apps/api/src/routes/chat.ts` and `apps/api/tests/integration/local-agent-stream.test.ts`; prove session identity is not inferred from the latest workspace session.
@@ -64,13 +65,13 @@
 
 **Independent Test**: Configure two agents with different destinations; instrument local and cloud endpoints; prove each prompt reaches only its selected endpoint and that unavailable endpoints fail without reaching the other.
 
-- [ ] T024 [P] [US3] Add API routing tests in `apps/api/tests/integration/agent-inference-routing.test.ts` for local, cloud, unavailable, invalid-provider, and no-fallback cases, using distinct local and cloud endpoint fixtures.
+- [ ] T024 [P] [US3] Add API routing tests in `apps/api/tests/integration/agent-inference-routing.test.ts` for two distinct agents configured to different destinations, plus local, cloud, unavailable, invalid-provider, and no-fallback cases; assert each agent reaches only its own destination.
 - [ ] T025 [P] [US3] Add rendered settings behavior tests in `apps/web/src/pages/SettingsAgents.behavior.test.tsx` proving the per-agent mode/provider choice is visible, saved, restored, and not silently reset.
 - [ ] T026 [US3] Extend the shared agent-setting type and runtime validation in `packages/shared/src/types/agent-settings.ts` and `apps/api/src/schemas/agent-settings.ts`; allow local HTTP only through the explicit local-mode contract and retain hosted HTTPS validation.
 - [ ] T027 [US3] Add the per-agent inference selector and selected-destination summary to `apps/web/src/pages/SettingsAgents.tsx` and the existing agent-settings components; verify the UI value reaches the API payload.
-- [ ] T028 [US3] Implement local connection verification and model listing in `apps/api/src/routes/local-models.ts` and `apps/api/tests/integration/local-model-connection.test.ts`; support Ollama first, reject arbitrary upstream URLs, and keep model-service credentials out of workspaces.
+- [ ] T028 [US3] Implement local model connection configuration, retrieval, verification, and model listing in `apps/api/src/routes/local-models.ts` and `apps/api/tests/integration/local-model-connection.test.ts`; support Ollama first, enforce the supported local-endpoint policy, persist only non-secret settings/references, and keep model-service credentials out of workspaces.
 - [ ] T029 [US3] Route OpenCode startup through the saved local/cloud selection in `packages/vm-agent/internal/acp/session_host.go` and its tests; pass only the selected destination credentials and never switch modes after a failure.
-- [ ] T030 [US3] Add packaged model-routing end-to-end coverage in `apps/desktop/tests/e2e/model-routing.spec.ts`; verify local selection reaches Ollama only, cloud selection reaches the chosen cloud provider only, and both outage cases produce actionable errors with zero cross-mode requests.
+- [ ] T030 [US3] Add packaged model-routing end-to-end coverage in `apps/desktop/tests/e2e/model-routing.spec.ts`; configure two agents with different destinations and verify each reaches only its selected provider. Also verify both outage cases produce actionable errors with zero cross-mode requests.
 
 ## Phase 6: User Story 4 - Recover and Manage Local Data (Priority: P2)
 
@@ -79,10 +80,10 @@
 **Independent Test**: Create projects, conversations, credentials, and a workspace; restart after an interrupted run, exercise backup/upgrade and credential removal, then choose uninstall retention/deletion and verify each data boundary.
 
 - [ ] T031 [P] [US4] Add crash-recovery tests in `apps/desktop/tests/integration/local-recovery.test.ts`; reconcile only resources carrying the current installation/workspace labels and report ambiguous cleanup as pending.
-- [ ] T032 [P] [US4] Add migration backup/restore tests in `apps/desktop/tests/integration/local-upgrade.test.ts`; verify a failed migration preserves a restorable copy and existing conversations/settings.
-- [ ] T033 [P] [US4] Add credential-removal and uninstall-retention tests in `apps/desktop/tests/e2e/data-retention.spec.ts`; verify retained project data and confirmed deletion are distinct outcomes.
+- [ ] T032 [P] [US4] Add packaged-version upgrade tests in `apps/desktop/tests/integration/local-upgrade.test.ts`; verify projects, agent choices, and conversations remain available across an app upgrade. Storage migration rollback and disk-full preservation are covered by T007.
+- [ ] T033 [P] [US4] Add credential create/update/removal and packaged uninstall-retention tests in `apps/desktop/tests/e2e/data-retention.spec.ts`; verify protected-secret round trips, provider scoping, redaction, retained project data, and confirmed deletion as distinct outcomes.
 - [ ] T034 [US4] Implement startup reconciliation and safe upgrade backups in `apps/desktop/src/main/recovery.ts` and `apps/desktop/src/main/local-data.ts`; never report a workspace stopped/deleted until Docker confirms the effect.
-- [ ] T035 [US4] Implement protected credential removal and uninstall retain/delete choices in `apps/desktop/src/main/credential-store.ts` and `apps/desktop/src/main/uninstall-data.ts`; remove secret references without deleting project/conversation data unless the user confirms that exact deletion.
+- [ ] T035 [US4] Implement protected credential create/update/removal in `apps/desktop/src/main/credential-store.ts`, exposing only opaque references to the local API and renderer. Integrate uninstall retain/delete choices with the packaged Windows uninstaller before deletion; never delete project/conversation data without confirmation.
 
 ## Phase 7: Polish and Cross-Cutting Verification
 
@@ -91,14 +92,14 @@
 - [ ] T036 [P] Update `apps/www/src/content/docs/docs/guides/local-desktop.md`, `apps/www/src/content/docs/docs/architecture/security.md`, `apps/www/src/content/docs/docs/architecture/overview.md`, and `apps/www/src/content/docs/docs/guides/local-development.md` with verified setup, trust boundaries, local data ownership, recovery, and troubleshooting.
 - [ ] T037 Add hosted-mode regression tests in `apps/api/tests/integration/hosted-inference-regression.test.ts` and `apps/web/src/pages/SettingsAgents.behavior.test.tsx`; prove existing hosted auth, HTTPS validation, model/provider selection, and workspace behavior remain unchanged.
 - [ ] T038 Add security tests in `apps/desktop/tests/integration/local-network-boundary.test.ts` for loopback-only control listeners, private gateway reachability, expired/scoped tokens, and absence of prompt/credential values in logs.
-- [ ] T039 Run the packaged Windows install-to-first-agent workflow in `apps/desktop/tests/e2e/local-first-agent.spec.ts` with Docker Desktop, WSL2, and real Ollama; separately run the cloud-provider path with test credentials and record versions, results, and cleanup evidence in `specs/036-local-desktop/quickstart.md`.
-- [ ] T040 Run the documented workspace checks and the Windows package/e2e commands from `apps/desktop/package.json`; record exact commands, totals, collection status, and failures in `specs/036-local-desktop/quickstart.md` and update completed checkboxes in `specs/036-local-desktop/tasks.md`.
+- [ ] T039 Run the packaged Windows install-to-first-agent workflow in `apps/desktop/tests/e2e/local-first-agent.spec.ts` with Docker Desktop, WSL2, and real Ollama; after setup/downloads, repeat local inference with outbound internet disabled. Separately run the cloud-provider path with test credentials and record versions, results, and cleanup evidence in `specs/036-local-desktop/quickstart.md`.
+- [ ] T040 Run the documented workspace checks and Windows package/e2e commands from `apps/desktop/package.json`; record exact commands, totals, collection status, failures, and coverage. Release requires >90% coverage for local authentication/ownership, workspace lifecycle/cleanup, persistence/migration/recovery, credential storage, and inference routing/gateway, plus >80% overall, as required by Constitution Principle II. Audit newly added ports, timeouts, paths, limits, and service URLs against Principle XI; record the audit in `specs/036-local-desktop/quickstart.md`.
 
 ## Dependencies and Execution Order
 
 ### Phase Dependencies
 
-- **Setup and feasibility (Phase 1)**: T001-T003 are the implementation gates. They may be investigated independently; all must pass or receive an approved replacement design before product code starts.
+- **Setup and feasibility (Phase 1)**: T001-T003 are technical implementation gates. The two owner decisions in Execution Gates must also be recorded before T004. These approvals do not replace the required runtime, credential-store, and network feasibility evidence.
 - **Foundational runtime (Phase 2)**: T004-T010 depend on the feasibility gates. Runtime boundary tests precede runtime implementation; persistence tests precede local persistence; identity tests precede local authentication.
 - **User Story 1 (Phase 3)**: Depends on Phase 2; delivers desktop launch, local projects, and lifecycle controls.
 - **User Story 2 (Phase 4)**: Depends on User Story 1 and T003; delivers the first actual local agent-response vertical slice.

@@ -54,7 +54,7 @@ As a user, I want to choose local or cloud inference for each supported agent so
 
 **Why this priority**: The requested choice is per agent and must work in the agent's real request path, not only appear as a saved setting.
 
-**Independent Test**: Configure OpenCode for local inference and complete a prompt while verifying no cloud inference provider receives it; then select a configured cloud provider and verify that prompt uses the selected provider instead.
+**Independent Test**: Configure two supported agents with different destinations, such as OpenCode using local inference and another supported agent using a cloud provider. Complete a prompt with each and verify each request reaches only that agent's selected destination.
 
 **Acceptance Scenarios**:
 

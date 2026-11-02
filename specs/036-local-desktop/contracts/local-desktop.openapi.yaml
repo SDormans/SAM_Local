@@ -29,6 +29,79 @@ paths:
                 $ref: "#/components/schemas/LocalRuntimeHealth"
         "401":
           description: Local desktop session is missing or invalid.
+  /api/local/models/connection:
+    get:
+      operationId: getLocalModelConnection
+      summary: Retrieve the saved non-secret local model connection settings
+      security:
+        - localSession: []
+      responses:
+        "200":
+          description: The configured non-secret connection settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalModelConnection"
+        "401":
+          description: Local desktop session is missing or invalid.
+        "404":
+          description: No local model connection is configured.
+    put:
+      operationId: configureLocalModelConnection
+      summary: Save the non-secret settings for the local model connection
+      description: >-
+        Secret material is saved through the trusted desktop credential-store
+        boundary and is never accepted in this request. The API validates the
+        configured endpoint against the supported local destination policy and
+        stores only connection metadata and an opaque credential reference.
+      security:
+        - localSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalModelConnectionInput"
+      responses:
+        "200":
+          description: The configured non-secret connection settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalModelConnection"
+        "400":
+          description: The provider, endpoint, model, or credential reference is invalid.
+        "401":
+          description: Local desktop session is missing or invalid.
+  /api/local/models/connection/verify:
+    post:
+      operationId: verifyLocalModelConnection
+      summary: Verify the saved local model connection
+      security:
+        - localSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [connectionId]
+              properties:
+                connectionId:
+                  type: string
+      responses:
+        "200":
+          description: Connection reachability and compatible model-list result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalModelConnectionVerification"
+        "401":
+          description: Local desktop session is missing or invalid.
+        "404":
+          description: The connection does not belong to this local installation.
+        "502":
+          description: The configured service is unavailable or incompatible.
   /local-model/v1/models:
     servers:
       - url: http://sam-model-gateway:{port}
@@ -144,6 +217,50 @@ components:
         Short-lived token scoped to one active workspace and its assigned local
         model connection; it grants no access to the Docker API or other users.
   schemas:
+    LocalModelConnectionInput:
+      type: object
+      required: [providerType, baseUrl, modelId]
+      properties:
+        providerType:
+          type: string
+          enum: [ollama, openai-compatible]
+        baseUrl:
+          type: string
+          format: uri
+          description: >-
+            Explicitly configured local service address. The API enforces the
+            supported local destination policy; arbitrary proxy targets are rejected.
+        modelId:
+          type: string
+        credentialRef:
+          type: string
+          description: Opaque reference only; never a secret value.
+    LocalModelConnection:
+      allOf:
+        - $ref: "#/components/schemas/LocalModelConnectionInput"
+        - type: object
+          required: [connectionId]
+          properties:
+            connectionId:
+              type: string
+            lastVerifiedAt:
+              type: string
+              format: date-time
+    LocalModelConnectionVerification:
+      type: object
+      required: [connectionId, status]
+      properties:
+        connectionId:
+          type: string
+        status:
+          type: string
+          enum: [usable, unavailable, incompatible]
+        models:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
     LocalRuntimeHealth:
       type: object
       required: [status, dockerDesktop, wsl2, dataStore]
