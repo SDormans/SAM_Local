@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [x] No `[NEEDS CLARIFICATION]` markers remain; unresolved product choices are explicitly listed under Open Questions for Prompt 3
+- [x] No `[NEEDS CLARIFICATION]` markers remain; decisions from the clarification session are recorded in the spec
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic
@@ -31,5 +31,5 @@
 
 ## Notes
 
-- The spec remains **Draft** until the three Open Questions are resolved in Prompt 3. Do not start architecture planning before that clarification step.
+- Clarifications are complete. Keep the spec in Draft until the user reviews and approves it for planning.
 - Requirements are based on the verified Prompt 1 research and the user's confirmed Windows-first, local-control-plane, OpenCode-first direction.
