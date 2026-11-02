@@ -108,7 +108,7 @@ product decisions discovered during Prompt 4 must be listed as owner approval
 gates and reviewed before implementation; do not silently add them to the spec.
 ```
 
-## Prompt 4 — Design the architecture
+## Prompt 4 — Design the architecture (completed; pushed as `7bcad4632`)
 
 ```text
 Use /speckit.plan for the clarified Native Local SAM Desktop spec.
@@ -140,7 +140,7 @@ delete data, expose a local service, materially change the existing hosted
 product, or force a major technology commitment.
 ```
 
-## Prompt 5 — Generate implementation tasks
+## Prompt 5 — Generate implementation tasks (completed in this step)
 
 ```text
 Use /speckit.tasks for the approved Native Local SAM Desktop spec and plan.

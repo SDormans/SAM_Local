@@ -2,7 +2,7 @@
 
 **Feature Branch**: `036-local-desktop`
 **Created**: 2026-11-02
-**Status**: Draft — clarifications complete; architecture plan awaiting owner approval
+**Status**: Draft — architecture approved for task generation; implementation feasibility gates remain
 **Input**: Run SAM itself as a native Windows desktop app, with the control plane, saved data, agent execution, and workspaces running locally. Let each agent use local or cloud inference; OpenCode is the first local-inference path.
 
 ## Clarifications

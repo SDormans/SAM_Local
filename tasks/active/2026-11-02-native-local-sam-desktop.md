@@ -41,7 +41,8 @@ SAM currently runs as a Cloudflare-hosted control plane that provisions remote V
 
 - [x] Create and clarify the feature specification with the user's confirmed Windows, Docker/WSL2, local-model access, and close behavior decisions.
 - [x] Map the current API, storage, Durable Object, UI, and VM Agent paths; document the local Worker-runtime feasibility gate.
-- [x] Plan local data ownership, authentication/security boundaries, service lifecycle, Docker integration, model routing, failure modes, and verification gates. The architecture remains pending user approval.
+- [x] Plan local data ownership, authentication/security boundaries, service lifecycle, Docker integration, model routing, failure modes, and verification gates. The user approved the architecture plan for task generation; implementation remains gated on feasibility results and unresolved shell/credential decisions.
+- [x] Generate dependency-ordered Prompt 5 implementation tasks in `specs/036-local-desktop/tasks.md`; no application code was changed.
 - [ ] Implement the Windows native desktop entry point and local service startup/shutdown with clear prerequisite/error reporting.
 - [ ] Implement persistent local control-plane storage and local workspace/agent execution without requiring Cloudflare or remote VM provisioning.
 - [ ] Add per-agent local-model configuration and an end-to-end model call through a local endpoint; retain and test cloud-model selection.
@@ -53,7 +54,13 @@ SAM currently runs as a Cloudflare-hosted control plane that provisions remote V
 
 - Added `specs/036-local-desktop/plan.md`, `research.md`, `data-model.md`, `contracts/local-desktop.openapi.yaml`, and `quickstart.md`.
 - No application code or hosted behavior was changed.
-- Implementation remains blocked on the user's architecture review and on proving the packaged local Worker/storage and private model-network paths.
+- The user approved the architecture plan for task generation. Implementation remains blocked on proving the packaged local Worker/storage and private model-network paths and recording the remaining shell/credential choices.
+
+## Prompt 5 Task Generation Outcome
+
+- Added `specs/036-local-desktop/tasks.md` with 40 executable tasks grouped by setup, foundation, the four user stories, and cross-cutting verification.
+- The first full Windows -> local workspace -> OpenCode -> Ollama streamed-response vertical slice is scheduled in User Story 2, after the three feasibility gates.
+- Prompt 5 is complete; no product implementation has started. Await user review before Prompt 6.
 
 ## Acceptance Criteria
 

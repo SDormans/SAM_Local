@@ -7,7 +7,7 @@
 
 Deliver a Windows single-user SAM desktop that packages the existing React control plane, runs a local API and durable local state, manages isolated Docker Desktop/WSL2 workspaces, and routes each supported agent explicitly to either a local model gateway or its configured cloud provider.
 
-**Architecture recommendation for review, not implementation approval:** use a narrowly privileged Electron shell to reuse the existing React/Vite UI and supervise local services; first prove that a pinned Miniflare/Workerd runtime can run the trusted API with persistent local bindings and no Cloudflare account; add a local workspace driver around Docker Desktop and reuse the Go VM Agent's ACP/session behavior where its runtime contracts fit. A SAM-owned model gateway should broker local inference and keep model-service credentials out of agent containers. Hosted deployment behavior remains on its current Cloudflare/VM path.
+**Architecture recommendation approved for task generation, not implementation approval:** evaluate a narrowly privileged Electron shell to reuse the existing React/Vite UI and supervise local services; first prove that a pinned Miniflare/Workerd runtime can run the trusted API with persistent local bindings and no Cloudflare account; add a local workspace driver around Docker Desktop and reuse the Go VM Agent's ACP/session behavior where its runtime contracts fit. A SAM-owned model gateway should broker local inference and keep model-service credentials out of agent containers. Hosted deployment behavior remains on its current Cloudflare/VM path.
 
 This is deliberately conditional: Cloudflare documents Miniflare/Wrangler local execution as a development environment, not as a packaged desktop product. Do not ship it as the product runtime until the feasibility tests in [quickstart.md](./quickstart.md) pass. If they fail, stop and return a Node/SQLite adapter design for owner approval rather than silently porting or duplicating the API.
 
@@ -94,7 +94,7 @@ specs/036-local-desktop/
 ├── quickstart.md
 ├── contracts/
 │   └── local-desktop.openapi.yaml
-└── tasks.md              # Prompt 5; not created in this step
+└── tasks.md              # Prompt 5 output
 ```
 
 ### Proposed Source Structure (subject to approval)

@@ -31,5 +31,5 @@
 
 ## Notes
 
-- Clarifications are complete and the user approved proceeding to planning. Keep the spec in Draft until the user approves the architecture and implementation scope.
+- Clarifications are complete, and the user approved the architecture plan for task generation. Keep the spec in Draft until implementation scope and the plan's feasibility gates are approved and demonstrated.
 - Requirements are based on the verified Prompt 1 research and the user's confirmed Windows-first, local-control-plane, OpenCode-first direction.
