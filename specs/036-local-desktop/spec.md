@@ -2,7 +2,7 @@
 
 **Feature Branch**: `036-local-desktop`
 **Created**: 2026-11-02
-**Status**: Draft — clarifications complete; awaiting review before planning
+**Status**: Draft — clarifications complete; architecture plan awaiting owner approval
 **Input**: Run SAM itself as a native Windows desktop app, with the control plane, saved data, agent execution, and workspaces running locally. Let each agent use local or cloud inference; OpenCode is the first local-inference path.
 
 ## Clarifications
@@ -46,6 +46,7 @@ As a user, I want SAM to create and manage an isolated workspace on my computer 
 3. **Given** an agent is running in a workspace, **When** it returns output, **Then** the user sees the response in the corresponding project conversation.
 4. **Given** a stopped workspace, **When** the user restarts it, **Then** SAM reports whether it is ready before allowing the user to start an agent.
 5. **Given** the user stops or deletes a workspace, **When** cleanup succeeds or fails, **Then** SAM reports the actual outcome and does not present an unconfirmed cleanup as successful.
+6. **Given** a repository uses supported devcontainer settings for nested Docker, **When** SAM starts its local workspace, **Then** SAM preserves those settings within Docker Desktop's WSL2 Linux VM security boundary and does not expose the Docker API to the local network.
 
 ### User Story 3 - Choose local or cloud inference per agent (Priority: P1)
 
@@ -121,6 +122,7 @@ As a user, I want my local projects and conversations to survive ordinary restar
 - **FR-020**: Local desktop behavior MUST remain separate from the existing hosted deployment; the feature MUST NOT change hosted users' workspace or inference behavior.
 - **FR-021**: The first release MUST be limited to Windows and a single local user. Hosted synchronization, multi-user access, remote VM provisioning in local mode, and other desktop operating systems are out of scope.
 - **FR-022**: When the user closes SAM while an agent is running, SAM MUST ask whether to stop the work or keep it running in the background. The default MUST be to stop gracefully; continued background work MUST require explicit user choice and remain clearly indicated.
+- **FR-023**: Local workspace creation MUST preserve supported repository devcontainer settings, including nested-Docker workflows. Docker Desktop's WSL2 Linux VM remains the security boundary; SAM MUST NOT publish its Docker API beyond that boundary.
 
 ### Key Entities
 

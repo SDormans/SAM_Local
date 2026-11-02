@@ -11,23 +11,29 @@ repository's normal quality, security, or review gates.
 - The first desktop release targets Windows.
 - The control plane, saved application data, agent execution, and workspaces run
   locally; a Cloudflare account and remote VM are not prerequisites.
+- Local workspaces require Docker Desktop with WSL2 Linux containers.
 - Each supported agent can be configured to use local inference or cloud
   inference.
-- OpenCode is the first local-inference path; retain cloud-model choices.
-- The user has not selected a workspace isolation runtime. Investigate Docker
-  Desktop/WSL2 and alternatives; recommend one with evidence instead of treating
-  Docker as already approved.
+- OpenCode is the first local-inference path. The first verified local service
+  is Ollama through an OpenAI-compatible API.
+- An isolated workspace must reach the host-local model service without
+  exposing that service to the local network.
+- Closing SAM during active work asks whether to stop or keep running in the
+  background; graceful stop is the default.
 
 ## How to use
 
-1. Start a fresh feature workflow from `main` and use the repository's Speckit
-   commands for the spec, plan, and tasks.
+1. Continue on the existing `036-local-desktop` feature branch. Do not create a
+   second feature branch or repeat completed prompts.
 2. Paste the prompts below one at a time, replacing bracketed values when
    needed.
-3. Do not start implementation until the scope, security boundaries, and local
-   runtime architecture have been reviewed.
-4. If a tool rejects a file edit, stop and ask before retrying the same edit.
-5. Keep the work single-user and local-first unless the product owner expands
+3. After each completed prompt, commit and push that step, then stop for the
+   user's review and approval before starting the next prompt. Prompt 1 is
+   read-only and does not require a commit by itself.
+4. Do not start implementation until the user approves the spec, architecture,
+   security boundaries, and local runtime feasibility gates.
+5. If a tool rejects a file edit, stop and ask before retrying the same edit.
+6. Keep the work single-user and local-first unless the product owner expands
    the scope.
 
 ## Prompt 1 — Research the existing system (read-only)
@@ -86,26 +92,20 @@ assuming them. Write the spec and its quality checklist only; do not edit
 application code or other feature specs.
 ```
 
-## Prompt 3 — Clarify product decisions
+## Prompt 3 — Clarify product decisions (completed)
 
 ```text
-Review the Native Local SAM Desktop spec and ask only questions whose answers
-materially change the user experience, security, or scope. Use the project's
-clarification workflow and ask no more than five focused questions at once.
+The user has already confirmed the following decisions in the spec:
+- Require Docker Desktop with WSL2 Linux containers.
+- Support OpenAI-compatible local model services; verify first with Ollama.
+- Allow protected access from isolated workspaces to the host-local model
+  service without LAN exposure.
+- When closing SAM during active work, ask whether to stop or continue in the
+  background; default to graceful stop.
 
-In particular, resolve:
-- whether a local workspace requires Docker Desktop/WSL2 or another supported
-  isolation model, based on Windows feasibility and user burden;
-- which local inference server/API formats the first release must support;
-- whether the local model server must be reachable only from the host or also
-  from an isolated workspace, and how the user configures that safely;
-- what cloud-provider credentials the local app may retain and how the user
-  removes them;
-- what exact native-app behavior is expected when SAM is closed while an agent
-  is running.
-
-Offer a recommended answer with plain-language tradeoffs for each question.
-Update the spec only after receiving my answers; do not begin implementation.
+Do not ask these questions again. The clarification step is complete. Any new
+product decisions discovered during Prompt 4 must be listed as owner approval
+gates and reviewed before implementation; do not silently add them to the spec.
 ```
 
 ## Prompt 4 — Design the architecture
@@ -122,6 +122,9 @@ Compare the smallest viable architecture options for:
 - replacing or adapting Cloudflare-only API/storage/DO dependencies for
   persistent single-user local operation;
 - starting, monitoring, recovering, and stopping local isolated workspaces;
+- preserving supported repository devcontainer behavior, including
+  nested-Docker workflows, within Docker Desktop's WSL2 Linux VM security
+  boundary;
 - reaching a host-local model server from an agent inside an isolated workspace;
 - protecting local credentials and preventing LAN exposure;
 - packaging, upgrades, logs, backups, and uninstall cleanup.
@@ -150,7 +153,8 @@ response. Do not postpone the integration path until the end.
 Include explicit tasks and tests for:
 - Windows packaging and supervised service lifecycle;
 - persistent local data and safe first-run initialization;
-- local workspace creation, isolation, restart recovery, stop, and deletion;
+- local workspace creation, isolation, restart recovery, stop, and deletion,
+  including supported devcontainer and nested-Docker behavior;
 - OpenCode local endpoint configuration and cloud provider selection;
 - proving each model choice reaches only its intended destination;
 - credentials, loopback/network access restrictions, failure reporting, and
