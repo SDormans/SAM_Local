@@ -35,6 +35,7 @@ export default defineConfig({
             { slug: 'docs/overview' },
             { slug: 'docs/quickstart' },
             { slug: 'docs/concepts' },
+            { slug: 'docs/roadmap' },
           ],
         },
         {

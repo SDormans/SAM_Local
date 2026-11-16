@@ -1,7 +1,9 @@
 ---
-title: Roadmap
-description: SAM development phases — what's shipped and what's next.
+title: Shipped Features
+description: SAM development phases that have shipped, and smaller items still planned.
 ---
+
+What SAM already does, grouped by the phase it shipped in. For what comes next, see the [Roadmap](/docs/roadmap/).
 
 ## Complete: Core Platform
 
