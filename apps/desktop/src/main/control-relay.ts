@@ -9,7 +9,7 @@
 import { createServer, type IncomingMessage, request, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { assertPrivateBindHost } from './model-gateway.js';
+import { assertPrivateBindHost, GATEWAY_PATH_PREFIX } from './model-gateway.js';
 
 export const RELAY_ALLOWED_PATHS: readonly RegExp[] = [
   /^\/\.well-known\/jwks\.json$/,
@@ -18,6 +18,12 @@ export const RELAY_ALLOWED_PATHS: readonly RegExp[] = [
   /^\/api\/workspaces\/[^/]+\/[a-z0-9/-]+$/i,
   /^\/api\/projects\/[^/]+\/(tasks|acp-sessions|sessions)\/[a-z0-9/-]+$/i,
 ];
+
+/** Model requests go to the loopback model gateway, which checks the workspace token itself. */
+export function isModelGatewayPath(rawUrl: string): boolean {
+  const path = rawUrl.split('?')[0] ?? '';
+  return !path.includes('..') && path.startsWith(`${GATEWAY_PATH_PREFIX}/`);
+}
 
 export function isRelayPathAllowed(rawUrl: string): boolean {
   const path = rawUrl.split('?')[0] ?? '';
@@ -31,6 +37,8 @@ export interface ControlRelayOptions {
   privateNetworkHosts: readonly string[];
   port?: number;
   apiPort: number;
+  /** Loopback port of the workspace model gateway; model paths return 404 when unset. */
+  modelGatewayPort?: number;
 }
 
 export interface RunningControlRelay {
@@ -45,7 +53,9 @@ export async function startControlRelay(
 ): Promise<RunningControlRelay> {
   assertPrivateBindHost(options.bindHost, options.privateNetworkHosts);
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    if (!req.url || !isRelayPathAllowed(req.url)) {
+    const modelPort = req.url && isModelGatewayPath(req.url) ? options.modelGatewayPort : undefined;
+    const targetPort = modelPort ?? options.apiPort;
+    if (!req.url || (modelPort === undefined && !isRelayPathAllowed(req.url))) {
       res.writeHead(404, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: 'NOT_FOUND', message: 'Not available through the relay' }));
       return;
@@ -55,10 +65,10 @@ export async function startControlRelay(
     const upstream = request(
       {
         host: '127.0.0.1',
-        port: options.apiPort,
+        port: targetPort,
         method: req.method,
         path: req.url,
-        headers: { ...headers, host: `127.0.0.1:${options.apiPort}` },
+        headers: { ...headers, host: `127.0.0.1:${targetPort}` },
       },
       (upstreamRes) => {
         const out = { ...upstreamRes.headers };

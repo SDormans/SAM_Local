@@ -24,6 +24,7 @@ import { log } from '../../lib/logger';
 import { parsePositiveInt } from '../../lib/route-helpers';
 import { getCredentialEncryptionKey } from '../../lib/secrets';
 import { ulid } from '../../lib/ulid';
+import { buildLocalOpencodeInferenceConfig } from '../../local/local-inference';
 import { requireApproved, requireAuth } from '../../middleware/auth';
 import { errors } from '../../middleware/error';
 import {
@@ -965,6 +966,21 @@ runtimeRoutes.post('/:id/agent-key', jsonValidator(AgentTypeBodySchema), async (
         credentialData.credentialProvider ?? agentCredentialProviderFallback(body.agentType),
       providerMode: credentialProviderMode,
       credentialGeneration: persistedAttribution?.credentialGeneration,
+    });
+  }
+
+  const localInference =
+    !credentialData && opencodeRequiresDedicatedCredential
+      ? buildLocalOpencodeInferenceConfig(c.env)
+      : null;
+  if (localInference) {
+    log.info('agent_key.local_model_gateway', { workspaceId, model: localInference.model });
+    return callbackJsonWithJit(c, workspace, 'agent_key', {
+      apiKey: '',
+      credentialKind: 'api-key',
+      credentialSource: 'local',
+      providerMode: 'local-model-gateway',
+      inferenceConfig: localInference,
     });
   }
 

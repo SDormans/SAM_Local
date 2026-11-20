@@ -50,6 +50,7 @@ export interface ServiceSupervisorOptions {
   port: number;
   /** Loopback port the local node agent publishes (passed to the API as LOCAL_VM_AGENT_PORT). */
   nodeAgentPort?: number;
+  localDefaultModel?: string;
   webDistDir?: string;
   wranglerBin?: string;
   probePrerequisites: () => Promise<LocalPrerequisites>;
@@ -170,6 +171,7 @@ export class ServiceSupervisor extends EventEmitter {
         secrets,
         port: this.options.port,
         nodeAgentPort: this.options.nodeAgentPort,
+        localDefaultModel: this.options.localDefaultModel,
         wranglerBin: this.options.wranglerBin,
         webDistDir: this.options.webDistDir,
         onOutput: this.options.onOutput,

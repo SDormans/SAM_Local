@@ -10,10 +10,16 @@ import { statfs } from 'node:fs/promises';
 
 import { type RunningControlRelay, startControlRelay } from '../control-relay.js';
 import { LOCAL_BASE_DOMAIN } from '../local-runtime-config.js';
+import { type RunningModelGateway, startModelGateway } from '../model-gateway.js';
 import { type CleanupReport, type DockerDesktopDriver } from './docker-desktop.js';
+import {
+  createWorkspaceTokenAuthorizer,
+  LOCAL_MODEL_CONNECTION_ID,
+} from './workspace-token-authorizer.js';
 
 export const NODE_AGENT_CONTAINER_PORT = 8443;
 export const DEFAULT_LOCAL_NODE_IMAGE = 'sam-local-node:dev';
+export const DEFAULT_MODEL_SERVICE_URL = 'http://127.0.0.1:11434';
 
 export interface LocalNodeOptions {
   apiUrl: string;
@@ -26,6 +32,9 @@ export interface LocalNodeOptions {
   platform?: NodeJS.Platform;
   fetchImpl?: typeof fetch;
   startRelay?: typeof startControlRelay;
+  startGateway?: typeof startModelGateway;
+  /** Host-local OpenAI-compatible model service (Ollama). Chosen here, never by workspaces. */
+  modelServiceUrl?: string;
   statDisk?: (path: string) => Promise<{ bavail: number; bsize: number }>;
 }
 
@@ -49,6 +58,7 @@ export function defaultProjectsRoot(platform: NodeJS.Platform, home: string): st
 
 export class LocalNode {
   private relay?: RunningControlRelay;
+  private gateway?: RunningModelGateway;
   nodeId?: string;
 
   constructor(readonly driver: DockerDesktopDriver) {}
@@ -60,10 +70,25 @@ export class LocalNode {
     const placement = relayPlacement(platform, gateway);
     const apiPort = Number(new URL(options.apiUrl).port);
     await this.relay?.close();
+    await this.gateway?.close();
+    const modelServiceUrl = options.modelServiceUrl ?? DEFAULT_MODEL_SERVICE_URL;
+    // Loopback only: workspaces reach it through the relay, which forwards just the model paths.
+    this.gateway = await (options.startGateway ?? startModelGateway)({
+      host: '127.0.0.1',
+      authorize: createWorkspaceTokenAuthorizer({
+        apiUrl: options.apiUrl,
+        fetchImpl: options.fetchImpl,
+      }),
+      resolveUpstream: async (connectionId) =>
+        connectionId === LOCAL_MODEL_CONNECTION_ID
+          ? { connectionId, baseUrl: modelServiceUrl }
+          : null,
+    });
     this.relay = await (options.startRelay ?? startControlRelay)({
       bindHost: placement.bindHost,
       privateNetworkHosts: [gateway],
       apiPort,
+      modelGatewayPort: this.gateway.port,
     });
     const relayPort = new URL(this.relay.url).port;
 
@@ -114,6 +139,8 @@ export class LocalNode {
     await this.driver.stopNode().catch(() => undefined);
     await this.relay?.close();
     this.relay = undefined;
+    await this.gateway?.close();
+    this.gateway = undefined;
   }
 
   async removeAll(): Promise<CleanupReport> {

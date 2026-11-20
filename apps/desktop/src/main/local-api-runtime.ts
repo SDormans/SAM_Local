@@ -25,6 +25,7 @@ export interface LocalApiRuntimeOptions {
   readyTimeoutMs?: number;
   sessionTtlSeconds?: number;
   nodeAgentPort?: number;
+  localDefaultModel?: string;
   /** Built `apps/web` output to serve same-origin with the API. */
   webDistDir?: string;
   onOutput?: (chunk: string) => void;
@@ -61,6 +62,7 @@ export async function writeLocalRuntimeFiles(
     | 'secrets'
     | 'sessionTtlSeconds'
     | 'nodeAgentPort'
+    | 'localDefaultModel'
     | 'webDistDir'
   >
 ): Promise<string> {
@@ -73,6 +75,7 @@ export async function writeLocalRuntimeFiles(
       installationId: options.installation.installationId,
       sessionTtlSeconds: options.sessionTtlSeconds,
       nodeAgentPort: options.nodeAgentPort,
+      localDefaultModel: options.localDefaultModel,
       webDistDir: options.webDistDir,
     })
   );

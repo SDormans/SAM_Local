@@ -52,6 +52,7 @@ const supervisor = new ServiceSupervisor({
   dataDir: resolveDataDirectory(),
   port,
   nodeAgentPort,
+  localDefaultModel: process.env.SAM_LOCAL_DEFAULT_MODEL,
   probePrerequisites: () => probePrerequisites(),
   startWorkspaceRuntime:
     process.env.SAM_LOCAL_WORKSPACES === 'off'
@@ -63,6 +64,7 @@ const supervisor = new ServiceSupervisor({
             bootstrapSecret,
             image: process.env.SAM_LOCAL_NODE_IMAGE ?? DEFAULT_LOCAL_NODE_IMAGE,
             hostPort: nodeAgentPort,
+            modelServiceUrl: process.env.SAM_LOCAL_MODEL_SERVICE_URL,
             projectsRoot:
               process.env.SAM_LOCAL_PROJECTS_ROOT ??
               defaultProjectsRoot(process.platform, homedir()),
