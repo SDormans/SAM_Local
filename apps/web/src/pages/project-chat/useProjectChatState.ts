@@ -40,6 +40,7 @@ import {
   submitTask,
 } from '../../lib/api';
 import { getSessionState } from '../../lib/chat-session-utils';
+import { getDesktopBridge } from '../../lib/desktop-bridge';
 import {
   applyMessageCommentRealtimeEventToQueryCache,
   chatQueryKeys,
@@ -471,7 +472,12 @@ export function useProjectChatState() {
         return;
       }
 
-      if (selectedRuntime !== 'cf-container' && !hasCloudCredentials) {
+      // The desktop app runs tasks on this computer's node, so no cloud credential is needed.
+      if (
+        selectedRuntime !== 'cf-container' &&
+        !hasCloudCredentials &&
+        getDesktopBridge() === null
+      ) {
         setSubmitError(
           'Cloud credentials required. Connect a cloud provider in Settings, or ask your admin to enable platform trial.'
         );

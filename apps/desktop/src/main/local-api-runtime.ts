@@ -8,9 +8,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 
-import type { InstallationRecord, LocalDataStore } from './local-data';
-import { buildLocalWranglerConfig } from './local-runtime-config';
-import { type LocalRuntimeSecrets, renderDevVars } from './runtime-secrets';
+import type { InstallationRecord, LocalDataStore } from './local-data.js';
+import { buildLocalWranglerConfig } from './local-runtime-config.js';
+import { type LocalRuntimeSecrets, renderDevVars } from './runtime-secrets.js';
 
 export const LOCAL_API_HOST = '127.0.0.1';
 export const LOCAL_API_DEFAULTS = { readyTimeoutMs: 120_000, stopTimeoutMs: 10_000 } as const;
@@ -24,11 +24,19 @@ export interface LocalApiRuntimeOptions {
   wranglerBin?: string;
   readyTimeoutMs?: number;
   sessionTtlSeconds?: number;
+  nodeAgentPort?: number;
+  localDefaultModel?: string;
+  /** Loopback desktop credential store (spec 036 T035). */
+  secretBrokerUrl?: string;
+  /** Built `apps/web` output to serve same-origin with the API. */
+  webDistDir?: string;
   onOutput?: (chunk: string) => void;
 }
 
 export interface RunningLocalApi {
   url: string;
+  /** Resolves when the runtime process exits for any reason. */
+  exited: Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -50,7 +58,15 @@ function wranglerBin(options: Pick<LocalApiRuntimeOptions, 'apiDir' | 'wranglerB
 export async function writeLocalRuntimeFiles(
   options: Pick<
     LocalApiRuntimeOptions,
-    'apiDir' | 'store' | 'installation' | 'secrets' | 'sessionTtlSeconds'
+    | 'apiDir'
+    | 'store'
+    | 'installation'
+    | 'secrets'
+    | 'sessionTtlSeconds'
+    | 'nodeAgentPort'
+    | 'localDefaultModel'
+    | 'secretBrokerUrl'
+    | 'webDistDir'
   >
 ): Promise<string> {
   const source = await readFile(join(options.apiDir, 'wrangler.toml'), 'utf8');
@@ -61,6 +77,10 @@ export async function writeLocalRuntimeFiles(
       apiDir: options.apiDir,
       installationId: options.installation.installationId,
       sessionTtlSeconds: options.sessionTtlSeconds,
+      nodeAgentPort: options.nodeAgentPort,
+      localDefaultModel: options.localDefaultModel,
+      secretBrokerUrl: options.secretBrokerUrl,
+      webDistDir: options.webDistDir,
     })
   );
   await writeFile(join(options.store.runtimeDir, '.dev.vars'), renderDevVars(options.secrets), {
@@ -210,7 +230,7 @@ export async function startLocalApi(options: LocalApiRuntimeOptions): Promise<Ru
       (r) => r.ok,
       () => false
     );
-    if (ok) return { url, stop };
+    if (ok) return { url, exited, stop };
     await new Promise((r) => setTimeout(r, 500));
   }
   await stop();

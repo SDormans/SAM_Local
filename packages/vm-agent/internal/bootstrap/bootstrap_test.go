@@ -1596,6 +1596,75 @@ exit 1
 	}
 }
 
+func TestWriteMountOverrideConfigBindsLocalFolder(t *testing.T) {
+	mockBinDir := t.TempDir()
+	mockDevcontainer := filepath.Join(mockBinDir, "devcontainer")
+	mockScript := `#!/bin/sh
+if [ "$1" = "read-configuration" ]; then
+  echo '[trace] resolving features...'
+  cat <<'EOF'
+{
+  "outcome": "success",
+  "mergedConfiguration": {
+    "name": "Repo Config",
+    "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
+    "postCreateCommands": [
+      "bash .devcontainer/post-create.sh"
+    ],
+    "postStartCommands": [
+      "bash .devcontainer/post-start.sh"
+    ],
+    "features": {
+      "ghcr.io/devcontainers/features/go:1": {
+        "version": "1.22"
+      }
+    }
+  }
+}
+EOF
+  exit 0
+fi
+echo "unexpected devcontainer command: $@" >&2
+exit 1
+`
+	if err := os.WriteFile(mockDevcontainer, []byte(mockScript), 0o755); err != nil {
+		t.Fatalf("failed to write mock devcontainer command: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", mockBinDir+":"+origPath)
+
+	cfg := &config.Config{
+		WorkspaceDir: "/workspace/demo",
+		Repository:   "/run/desktop/mnt/host/c/code/demo",
+		RepoProvider: "local",
+	}
+
+	path, err := writeMountOverrideConfig(context.Background(), cfg, "sam-ws-abc123", "", "", "")
+	if err != nil {
+		t.Fatalf("writeMountOverrideConfig returned error: %v", err)
+	}
+	defer os.Remove(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read mount override config: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"workspaceMount": "source=/run/desktop/mnt/host/c/code/demo,target=/workspaces/demo,type=bind"`) {
+		t.Fatalf("expected local bind workspaceMount, got:\n%s", content)
+	}
+	if strings.Contains(content, "type=volume") {
+		t.Fatalf("local folders must not use the workspace volume, got:\n%s", content)
+	}
+}
+
+func TestEnsureRepositoryReadySkipsCloneForLocalFolder(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	cfg := &config.Config{Repository: "/home/me/demo", RepoProvider: "local", Branch: "main"}
+	if err := ensureRepositoryReady(context.Background(), cfg, nil, "sam-ws-abc123"); err != nil {
+		t.Fatalf("expected local folder to skip clone, got %v", err)
+	}
+}
+
 func TestWriteMountOverrideConfigRequiresRuntimeSource(t *testing.T) {
 	mockBinDir := t.TempDir()
 	mockDevcontainer := filepath.Join(mockBinDir, "devcontainer")
@@ -3771,5 +3840,78 @@ func TestGeneratedDevcontainerHelperSlowCredentials(t *testing.T) {
 	output, err := cmd.CombinedOutput()
 	if err != nil || !strings.Contains(string(output), "password=slow-result") {
 		t.Fatalf("helper output=%s err=%v", output, err)
+	}
+}
+
+func TestDevcontainerUpArgsAddsInstallationLabels(t *testing.T) {
+	cfg := &config.Config{
+		WorkspaceDir:         "/home/me/demo",
+		WorkspaceID:          "ws1",
+		ContainerLabelKey:    "devcontainer.local_folder",
+		ContainerLabelValue:  "/home/me/demo",
+		ExtraContainerLabels: []string{"sam.installation=abc"},
+	}
+	got := strings.Join(devcontainerUpArgs(cfg, "", ""), " ")
+	want := "up --workspace-folder /home/me/demo --id-label devcontainer.local_folder=/home/me/demo --id-label sam.installation=abc --id-label sam.workspace=ws1"
+	if got != want {
+		t.Fatalf("devcontainerUpArgs = %q, want %q", got, want)
+	}
+	cfg.ExtraContainerLabels = nil
+	if got := strings.Join(devcontainerUpArgs(cfg, "", ""), " "); strings.Contains(got, "--id-label") {
+		t.Fatalf("hosted nodes must keep default identity labels, got %q", got)
+	}
+}
+
+func TestEnsureWorkspaceOwnershipLeavesLocalFoldersAlone(t *testing.T) {
+	cfg := &config.Config{ContainerUser: "node", RepoProvider: "local", Repository: "/home/me/demo"}
+	if err := ensureWorkspaceOwnership(context.Background(), cfg); err != nil {
+		t.Fatalf("ensureWorkspaceOwnership = %v, want nil without touching docker", err)
+	}
+}
+
+func TestDefaultDevcontainerConfigLocalFolderWithSpacesAndQuotes(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), `My "Project"`)
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		RepoProvider:                  "local",
+		Repository:                    folder,
+		WorkspaceDir:                  folder,
+		WorkspaceID:                   "ws1",
+		DefaultDevcontainerConfigPath: filepath.Join(t.TempDir(), "default.json"),
+	}
+	path, err := writeDefaultDevcontainerConfigForMode(cfg, "", "", false)
+	if err != nil {
+		t.Fatalf("writeDefaultDevcontainerConfigForMode: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		t.Fatalf("default config is not valid JSON: %v\n%s", err, raw)
+	}
+	want := "/workspaces/" + config.DeriveRepoDirName(folder)
+	if parsed["workspaceFolder"] != want {
+		t.Fatalf("workspaceFolder = %v, want %s", parsed["workspaceFolder"], want)
+	}
+	if mount, _ := parsed["workspaceMount"].(string); !strings.Contains(mount, "target="+want+",") {
+		t.Fatalf("workspaceMount = %q, want target %s", mount, want)
+	}
+}
+
+func TestDevcontainerUpArgsLocalFolderUsesWorkspaceIdentity(t *testing.T) {
+	cfg := &config.Config{
+		WorkspaceDir:        "/home/me/demo",
+		WorkspaceID:         "ws2",
+		RepoProvider:        "local",
+		ContainerLabelKey:   "devcontainer.local_folder",
+		ContainerLabelValue: "/home/me/demo#ws2",
+	}
+	got := strings.Join(devcontainerUpArgs(cfg, "", ""), " ")
+	if !strings.Contains(got, "--id-label devcontainer.local_folder=/home/me/demo#ws2") {
+		t.Fatalf("devcontainerUpArgs = %q, want the per-workspace identity label", got)
 	}
 }

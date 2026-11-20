@@ -49,6 +49,28 @@ describe('buildLocalWranglerConfig', () => {
     expect(config.durable_objects).toBeTruthy();
   });
 
+  it('serves the built web app same-origin while API paths reach the Worker first', () => {
+    const out = parse(
+      buildLocalWranglerConfig('main = "x.ts"', {
+        apiDir: '/api',
+        installationId: 'i',
+        webDistDir: '/web/dist',
+      })
+    ) as { assets: { directory: string; not_found_handling: string; run_worker_first: string[] } };
+    expect(out.assets).toEqual({
+      directory: '/web/dist',
+      not_found_handling: 'single-page-application',
+      run_worker_first: expect.arrayContaining(['/api/*', '/health', '/.well-known/*', '/mcp/*']),
+    });
+    expect(() =>
+      buildLocalWranglerConfig('main = "x.ts"', {
+        apiDir: '/a',
+        installationId: 'i',
+        webDistDir: 'rel',
+      })
+    ).toThrow(/webDistDir/);
+  });
+
   it('resolves default migration dirs and validates inputs', () => {
     const out = parse(
       buildLocalWranglerConfig('main = "x.ts"\n[[d1_databases]]\nbinding = "D"\n', {

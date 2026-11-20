@@ -24,6 +24,10 @@ import { log } from '../../lib/logger';
 import { parsePositiveInt } from '../../lib/route-helpers';
 import { getCredentialEncryptionKey } from '../../lib/secrets';
 import { ulid } from '../../lib/ulid';
+import { resolveLocalOpencodeInferenceConfig } from '../../local/local-inference';
+import { readLocalModelConnection } from '../../local/local-models';
+import { sealCredential } from '../../local/local-secret-store';
+import { isLocalRuntime } from '../../local/runtime-mode';
 import { requireApproved, requireAuth } from '../../middleware/auth';
 import { errors } from '../../middleware/error';
 import {
@@ -37,7 +41,7 @@ import {
 import { appendBootLog } from '../../services/boot-log';
 import { registerBootstrapTokenConsume } from '../../services/bootstrap';
 import { syncActiveAgentCredentialSecret } from '../../services/composable-credentials/agent-sync';
-import { decrypt, encrypt } from '../../services/encryption';
+import { decrypt } from '../../services/encryption';
 import { getInstallationToken, getUserInstallationRepositories } from '../../services/github-app';
 import {
   GitHubCliPolicyError,
@@ -893,6 +897,39 @@ runtimeRoutes.post('/:id/agent-key', jsonValidator(AgentTypeBodySchema), async (
   // routes through the SAM platform proxy, so it always requires a dedicated key.
   const opencodeRequiresDedicatedCredential = body.agentType === 'opencode';
 
+  // Spec 036: in the desktop app an explicit inference mode picks the destination, with no fallback.
+  const inferenceMode =
+    isLocalRuntime(c.env) && opencodeRequiresDedicatedCredential
+      ? ((
+          await db
+            .select({ inferenceMode: schema.agentSettings.inferenceMode })
+            .from(schema.agentSettings)
+            .where(
+              and(
+                eq(schema.agentSettings.userId, workspace.userId),
+                eq(schema.agentSettings.agentType, body.agentType)
+              )
+            )
+            .limit(1)
+        )[0]?.inferenceMode ?? null)
+      : null;
+  if (inferenceMode === 'local') {
+    const selectedLocal = await resolveLocalOpencodeInferenceConfig(c.env);
+    if (!selectedLocal) {
+      throw errors.badRequest(
+        'OpenCode is set to use a local model, but no local model is configured. Choose a model in SAM settings, or switch OpenCode to cloud.'
+      );
+    }
+    log.info('agent_key.local_model_gateway', { workspaceId, model: selectedLocal.model });
+    return callbackJsonWithJit(c, workspace, 'agent_key', {
+      apiKey: '',
+      credentialKind: 'api-key',
+      credentialSource: 'local',
+      providerMode: 'local-model-gateway',
+      inferenceConfig: selectedLocal,
+    });
+  }
+
   const encryptionKey = getCredentialEncryptionKey(c.env);
   let credentialData = await getDecryptedAgentKey(
     db,
@@ -965,6 +1002,21 @@ runtimeRoutes.post('/:id/agent-key', jsonValidator(AgentTypeBodySchema), async (
         credentialData.credentialProvider ?? agentCredentialProviderFallback(body.agentType),
       providerMode: credentialProviderMode,
       credentialGeneration: persistedAttribution?.credentialGeneration,
+    });
+  }
+
+  const localInference =
+    !credentialData && opencodeRequiresDedicatedCredential && inferenceMode !== 'cloud'
+      ? await resolveLocalOpencodeInferenceConfig(c.env)
+      : null;
+  if (localInference) {
+    log.info('agent_key.local_model_gateway', { workspaceId, model: localInference.model });
+    return callbackJsonWithJit(c, workspace, 'agent_key', {
+      apiKey: '',
+      credentialKind: 'api-key',
+      credentialSource: 'local',
+      providerMode: 'local-model-gateway',
+      inferenceConfig: localInference,
     });
   }
 
@@ -1368,7 +1420,7 @@ runtimeRoutes.post(
     }
 
     // Re-encrypt with a fresh IV and update.
-    const { ciphertext, iv } = await encrypt(body.credential, getCredentialEncryptionKey(c.env));
+    const { ciphertext, iv } = await sealCredential(c.env, body.credential);
     const update = await c.env.DATABASE.prepare(
       `UPDATE credentials
           SET encrypted_token = ?, iv = ?, updated_at = ?
@@ -1511,6 +1563,8 @@ runtimeRoutes.get('/:id/runtime', async (c) => {
   );
 
   await assertWorkspaceCallbackIdentityCurrent(c.env, workspace, 'runtime');
+  // Spec 036: tells the desktop model gateway which local model service this installation saved.
+  const localModel = isLocalRuntime(c.env) ? await readLocalModelConnection(c.env) : null;
   return c.json({
     workspaceId: workspace.workspaceId,
     repository: workspace.repository,
@@ -1519,6 +1573,8 @@ runtimeRoutes.get('/:id/runtime', async (c) => {
     chatSessionId: workspace.chatSessionId,
     status: workspace.status,
     nodeId: workspace.nodeId,
+    // The gateway adds the /v1 API prefix itself.
+    ...(localModel ? { localModel: { baseUrl: localModel.baseUrl.replace(/\/v1\/?$/, '') } } : {}),
   });
 });
 

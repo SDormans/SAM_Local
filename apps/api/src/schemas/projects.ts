@@ -33,7 +33,8 @@ export const CreateProjectSchema = v.object({
   githubRepoNodeId: v.optional(v.string()),
   gitlabProjectId: v.optional(v.number()),
   defaultBranch: v.optional(v.string()),
-  repoProvider: v.optional(v.picklist(['github', 'artifacts', 'gitlab'])),
+  repoProvider: v.optional(v.picklist(['github', 'artifacts', 'gitlab', 'local'])),
+  localPath: v.optional(v.pipe(v.string(), v.maxLength(1024))),
 });
 
 export const UpdateProjectSchema = v.object({

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -118,7 +119,19 @@ func isLocalDevelopmentHost(host string) bool {
 		return true
 	}
 	ip := net.ParseIP(normalized)
-	return ip != nil && ip.IsLoopback()
+	if ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return isLocalDesktopPrivateHost(normalized, ip)
+}
+
+// isLocalDesktopPrivateHost allows the spec 036 desktop node agent, which reaches the local
+// control plane through a relay on a private Docker network, to use http. Opt-in only.
+func isLocalDesktopPrivateHost(host string, ip net.IP) bool {
+	if os.Getenv("SAM_LOCAL_DESKTOP") != "true" {
+		return false
+	}
+	return host == "host.docker.internal" || (ip != nil && ip.IsPrivate())
 }
 
 func (v *JWTValidator) parse(tokenString string) (*Claims, error) {

@@ -9,6 +9,8 @@ For instant sessions, SAM can also run one standalone vm-agent in a raw Cloudfla
 
 The optional [SAM account assistant](/docs/architecture/sam-account-assistant/) keeps canonical private history in a per-user `SamSession` Durable Object and delegates repository work into visible project tasks.
 
+A [local desktop](/docs/guides/local-desktop/) variant runs the same API Worker on local workerd inside an Electron app. It uses a local data folder for D1, KV, and Durable Object state, and Docker containers on the same computer for workspaces. Requests to a local model go through a SAM-owned gateway. See [Local Desktop Trust Boundaries](/docs/architecture/security/#local-desktop-trust-boundaries).
+
 ## High-Level Architecture
 
 ```mermaid

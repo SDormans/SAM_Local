@@ -379,6 +379,36 @@ describe('Agent Settings Routes', () => {
   });
 
   describe('PUT /api/agent-settings/opencode (provider validation)', () => {
+    it('should reject local inference mode in hosted mode', async () => {
+      const res = await putSettings('opencode', { inferenceMode: 'local' });
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).message).toContain('only for OpenCode in the SAM desktop app');
+    });
+
+    it('should reject local inference mode for agents other than OpenCode', async () => {
+      const res = await putSettings('claude-code', { inferenceMode: 'local' }, {
+        SAM_RUNTIME_MODE: 'local',
+      } as Partial<Env>);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should reject unknown inference modes', async () => {
+      const res = await putSettings('opencode', { inferenceMode: 'hybrid' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should accept local inference mode for OpenCode in the local runtime', async () => {
+      queueSavedOpenCodeSettings('opencode-zen', null);
+      const res = await putSettings('opencode', { inferenceMode: 'local' }, {
+        SAM_RUNTIME_MODE: 'local',
+      } as Partial<Env>);
+
+      expect(res.status).toBe(201);
+    });
+
     it('should reject custom provider without opencodeBaseUrl', async () => {
       const res = await putSettings('opencode', { opencodeProvider: 'custom' });
 

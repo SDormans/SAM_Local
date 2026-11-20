@@ -27,7 +27,25 @@ export interface LocalWranglerConfigOptions {
   apiDir: string;
   installationId: string;
   sessionTtlSeconds?: number;
+  /** Loopback port of the local node agent container. */
+  nodeAgentPort?: number;
+  /** Model OpenCode uses through the local model gateway (until per-agent selection lands). */
+  localDefaultModel?: string;
+  /** Built `apps/web` output served same-origin with the API; omitted for API-only runs. */
+  webDistDir?: string;
+  secretBrokerUrl?: string;
 }
+
+/** API paths that must reach the Worker even when a static asset could match. */
+export const LOCAL_WORKER_FIRST_PATHS = [
+  '/api/*',
+  '/health',
+  '/.well-known/*',
+  '/mcp/*',
+  '/ai/*',
+  '/auth/*',
+  '/connect/*',
+] as const;
 
 function asTables(value: unknown): JsonMap[] {
   return Array.isArray(value) ? (value as JsonMap[]) : [];
@@ -61,6 +79,17 @@ export function buildLocalWranglerConfig(
     ...(options.sessionTtlSeconds
       ? { LOCAL_SESSION_TTL_SECONDS: String(options.sessionTtlSeconds) }
       : {}),
+    ...(options.nodeAgentPort ? { LOCAL_VM_AGENT_PORT: String(options.nodeAgentPort) } : {}),
+    ...(options.localDefaultModel ? { LOCAL_DEFAULT_MODEL: options.localDefaultModel } : {}),
+    ...(options.secretBrokerUrl ? { LOCAL_SECRET_BROKER_URL: options.secretBrokerUrl } : {}),
   };
+  if (options.webDistDir) {
+    if (!isAbsolute(options.webDistDir)) throw new Error('webDistDir must be absolute');
+    config.assets = {
+      directory: options.webDistDir,
+      not_found_handling: 'single-page-application',
+      run_worker_first: [...LOCAL_WORKER_FIRST_PATHS],
+    };
+  }
   return stringify(config);
 }

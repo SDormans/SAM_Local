@@ -665,6 +665,15 @@ func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status, message)
 		return
 	}
+	if isLocalRepoProvider(body.RepoProvider) {
+		cleaned, err := validateLocalRepositoryPath(s.config.LocalProjectsRoot, body.Repository)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		body.Repository = cleaned
+		body.CloneURL = ""
+	}
 
 	if !s.requireNodeManagementAuth(w, r, body.WorkspaceID) {
 		return

@@ -6,6 +6,7 @@
  * the DO's step table keeps one import site. See rule 18.
  */
 import { log } from '../../lib/logger';
+import { isLocalRuntime } from '../../local/runtime-mode';
 import { isNodeAgentVersionCompatible } from '../../services/node-agent-compatibility';
 import {
   type CapacityAwareNodePlacementRow,
@@ -120,6 +121,7 @@ export async function handleNodeSelection(
             id: string;
             status: string;
             agentVersion: string | null;
+            nodeClass?: string | null;
           })
         | null
       >();
@@ -161,7 +163,16 @@ export async function handleNodeSelection(
     const authoritativeNodes = await filterReusableNodesByCurrentAuthority(rc.env.DATABASE, {
       userId: state.userId,
       projectId: state.projectId,
-      selections: [{ nodeId: node.id, capacityPlacementSnapshot }],
+      selections: [
+        {
+          nodeId: node.id,
+          capacityPlacementSnapshot,
+          // Spec 036: the desktop's own node is user-owned; hosted keeps managed-only reuse.
+          ...(isLocalRuntime(rc.env) && node.nodeClass === 'user-owned'
+            ? { nodeClass: 'user-owned' as const }
+            : {}),
+        },
+      ],
     });
     if (!authoritativeNodes.has(node.id)) {
       throw Object.assign(new Error('Specified node no longer has current placement authority'), {

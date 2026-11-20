@@ -11,6 +11,9 @@ import type { ResourceRequirements } from './resource';
  * - 'oauth': Direct injection (Claude Code OAuth token, not proxied).
  * - null: No provider selected (agent not configured via this path).
  */
+/** Spec 036: where an agent's model requests go. 'local' exists only in the desktop runtime. */
+export type AgentInferenceMode = 'local' | 'cloud';
+
 export type AgentProviderMode = 'sam' | 'user-api-key' | 'oauth';
 
 /** Valid provider modes — single source of truth for validation. */
@@ -114,6 +117,8 @@ export interface AgentSettingsResponse {
   opencodeBaseUrl: string | null;
   /** Provider mode for Claude Code / Codex. null = not explicitly selected. */
   providerMode: AgentProviderMode | null;
+  /** Spec 036: explicit inference destination; null keeps the existing provider behavior. */
+  inferenceMode: AgentInferenceMode | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -131,6 +136,7 @@ export interface SaveAgentSettingsRequest {
   opencodeBaseUrl?: string | null;
   /** Provider mode for Claude Code / Codex. null = clear selection. */
   providerMode?: AgentProviderMode | null;
+  inferenceMode?: AgentInferenceMode | null;
 }
 
 // =============================================================================

@@ -388,9 +388,9 @@ async function verifyRepositoryUserAccess(
   userId: string,
   tokens: { github: () => Promise<string | null>; gitlab: () => Promise<string> }
 ): Promise<schema.GitHubInstallation | undefined> {
-  // Artifacts-backed projects have no external user repository to intersect
-  // against — they are out of scope for this gate.
-  if (project.repoProvider === 'artifacts') {
+  // Artifacts-backed and local-folder (spec 036) projects have no external user
+  // repository to intersect against — they are out of scope for this gate.
+  if (project.repoProvider === 'artifacts' || project.repoProvider === 'local') {
     return undefined;
   }
   if (project.repoProvider === 'gitlab') {
@@ -438,7 +438,7 @@ export async function requireRepositoryOwnerAccess(
   userId: string,
   flow = 'owner-preflight'
 ): Promise<void> {
-  if (project.repoProvider === 'artifacts') {
+  if (project.repoProvider === 'artifacts' || project.repoProvider === 'local') {
     return;
   }
   if (project.repoProvider === 'gitlab') {

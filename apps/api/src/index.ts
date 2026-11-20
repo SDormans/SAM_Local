@@ -3,6 +3,7 @@ export { WorkspaceBootLog } from './durable-objects/workspace-boot-log';
 import { adminAgentEmailRoutes } from './routes/admin-agent-email';
 import { cliOperationReceiptRoutes } from './routes/cli-operation-receipts';
 import { cliProjectMetadataRoutes } from './routes/cli-project-metadata';
+import { localModelsRoutes } from './routes/local-models';
 import { projectScheduleRoutes } from './routes/project-schedules';
 import { projectStandingWatchRoutes } from './routes/project-standing-watches';
 // Re-export Durable Object classes for Cloudflare Workers runtime
@@ -44,6 +45,7 @@ import { withRequestScopedD1Bindings } from './lib/d1-session';
 import { log, serializeError } from './lib/logger';
 import { resolvePagesProxyTarget } from './lib/pages-proxy';
 import { parseWorkspaceSubdomain } from './lib/workspace-subdomain';
+import { sweepLocalSecrets } from './local/local-secret-store';
 import { isLocalRuntime, localRuntimeGuard, withLocalRuntimeBindings } from './local/runtime-mode';
 import { analyticsMiddleware } from './middleware/analytics';
 import { apiCors } from './middleware/api-cors';
@@ -197,6 +199,21 @@ app.onError(handleAppError);
 
 // Local desktop runtime (spec 036) only: loopback Host check and outbound cloud guard.
 app.use('*', localRuntimeGuard());
+// Spec 036 T035: after a credential change, drop desktop-stored secrets nothing references.
+app.use('*', async (c, next) => {
+  await next();
+  if (
+    !isLocalRuntime(c.env) ||
+    c.req.method === 'GET' ||
+    c.res.status >= 400 ||
+    !/credential/.test(c.req.path)
+  ) {
+    return;
+  }
+  await sweepLocalSecrets(c.env).catch((error: unknown) =>
+    log.warn('local_secret_sweep_failed', { error: (error as Error).message })
+  );
+});
 
 // Signed preview-host requests bypass session auth, credentialed CORS, Pages,
 // and workspace cookie handling.
@@ -784,6 +801,7 @@ app.get('/.well-known/openid-configuration', async (c) => {
 // codexRefreshRoutes uses workspace callback token auth (query param), not session auth.
 // apiTokenRoutes uses dedicated API token auth, not session auth.
 // Both must be mounted before authRoutes to avoid BetterAuth's wildcard catch-all.
+app.route('/api/local/models', localModelsRoutes);
 app.route('/api/local', localAuthRoutes);
 app.route('/api/auth', codexRefreshRoutes);
 app.route('/api/auth', apiTokenRoutes);

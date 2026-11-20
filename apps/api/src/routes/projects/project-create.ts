@@ -9,6 +9,7 @@ import type { Env } from '../../env';
 import { log } from '../../lib/logger';
 import { toProjectResponse } from '../../lib/mappers';
 import { ulid } from '../../lib/ulid';
+import { isLocalRuntime } from '../../local/runtime-mode';
 import { getUserId } from '../../middleware/auth';
 import { errors } from '../../middleware/error';
 import { createOwnerProjectMembership } from '../../middleware/project-auth';
@@ -31,6 +32,40 @@ import {
   toArtifactsRepoName,
 } from './_helpers';
 
+const WINDOWS_ABSOLUTE_PATH = /^[a-zA-Z]:[\\/]/;
+
+/** Accepts only absolute Windows or POSIX folder paths without control characters. */
+export function normalizeLocalProjectPath(input: string | undefined): string {
+  const path = input?.trim() ?? '';
+  // eslint-disable-next-line no-control-regex
+  if (!path || /[\u0000-\u001f]/.test(path)) {
+    throw errors.badRequest('localPath must be an absolute folder path');
+  }
+  if (!WINDOWS_ABSOLUTE_PATH.test(path) && !path.startsWith('/')) {
+    throw errors.badRequest('localPath must be an absolute folder path');
+  }
+  if (path.split(/[\\/]/).includes('..')) {
+    throw errors.badRequest('localPath must not contain ".." segments');
+  }
+  if (WINDOWS_ABSOLUTE_PATH.test(path)) {
+    const windows = `${path.charAt(0).toUpperCase()}${path.slice(1).replace(/[\\/]+/g, '\\')}`;
+    return windows.length > 3 ? windows.replace(/\\$/, '') : windows;
+  }
+  const posix = path.replace(/\/+/g, '/');
+  return posix.length > 1 ? posix.replace(/\/$/, '') : posix;
+}
+
+/** Comparison key for a stored or normalized local path: Windows paths are case-insensitive. */
+export function localProjectPathKey(normalizedPath: string): string {
+  if (WINDOWS_ABSOLUTE_PATH.test(normalizedPath)) {
+    return normalizedPath
+      .replace(/[\\/]+/g, '\\')
+      .replace(/(.{3,})\\$/, '$1')
+      .toLowerCase();
+  }
+  return normalizedPath.replace(/\/+/g, '/').replace(/(.+)\/$/, '$1');
+}
+
 export function registerProjectCreateRoute(crudRoutes: Hono<{ Bindings: Env }>): void {
   crudRoutes.post('/', jsonValidator(CreateProjectSchema), async (c) => {
     const userId = getUserId(c);
@@ -44,7 +79,9 @@ export function registerProjectCreateRoute(crudRoutes: Hono<{ Bindings: Env }>):
         ? 'artifacts'
         : body.repoProvider === 'gitlab'
           ? 'gitlab'
-          : 'github';
+          : body.repoProvider === 'local'
+            ? 'local'
+            : 'github';
     const description = body.description?.trim() || null;
 
     if (!name) {
@@ -77,7 +114,43 @@ export function registerProjectCreateRoute(crudRoutes: Hono<{ Bindings: Env }>):
     const now = new Date().toISOString();
     const projectId = ulid();
 
-    if (repoProvider === 'artifacts') {
+    if (repoProvider === 'local') {
+      // ─── Local desktop folder (spec 036): no clone, no Git network call ──
+      if (!isLocalRuntime(c.env)) {
+        throw errors.badRequest('Local folder projects are only available in the desktop app');
+      }
+      const localPath = normalizeLocalProjectPath(body.localPath);
+      // Bounded by maxProjectsPerUser (checked above).
+      const localRows = await db
+        .select({ repository: schema.projects.repository })
+        .from(schema.projects)
+        .where(and(eq(schema.projects.userId, userId), eq(schema.projects.repoProvider, 'local')));
+      const pathKey = localProjectPathKey(localPath);
+      if (localRows.some((row) => localProjectPathKey(row.repository) === pathKey)) {
+        throw errors.conflict('A project for this folder already exists');
+      }
+      await db.insert(schema.projects).values({
+        id: projectId,
+        userId,
+        name,
+        normalizedName,
+        description,
+        installationId:
+          c.env.TRIAL_ANONYMOUS_INSTALLATION_ID ?? 'system_anonymous_trials_installation',
+        repository: localPath,
+        defaultBranch: body.defaultBranch?.trim() || 'main',
+        repoProvider: 'local',
+        createdBy: userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      try {
+        await createOwnerProjectMembership(db, projectId, userId, userId, now);
+      } catch (dbError) {
+        await db.delete(schema.projects).where(eq(schema.projects.id, projectId));
+        throw dbError;
+      }
+    } else if (repoProvider === 'artifacts') {
       // ─── Artifacts-backed project ───────────────────────────────────────
       const artifactsEnabled = c.env.ARTIFACTS_ENABLED === 'true';
       if (!artifactsEnabled) {

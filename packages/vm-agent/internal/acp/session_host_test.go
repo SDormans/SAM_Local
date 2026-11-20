@@ -3454,3 +3454,29 @@ func TestInjectAgentCredential_OpenCodeProviderEnvVarOverrides(t *testing.T) {
 		})
 	}
 }
+
+func TestInjectAgentCredential_OpencodeLocalModelGateway(t *testing.T) {
+	host := newProxyCredentialTestHost(t, "workspace-token")
+	host.config.ControlPlaneURL = "http://172.20.0.1:4321/"
+	cred := proxyCredentialForTest("", "openai-compatible", "{controlPlaneUrl}/local-model/v1", "qwen2.5:0.5b", "callback-token")
+	envVars, settings := injectProxyCredentialForTest(t, host, "opencode", cred)
+	if !hasEnvEntry(envVars, "OPENCODE_API_KEY=workspace-token") {
+		t.Fatalf("envVars = %v, want OPENCODE_API_KEY=workspace-token", envVars)
+	}
+	if settings == nil || settings.OpencodeProvider != "custom" ||
+		settings.OpencodeBaseURL != "http://172.20.0.1:4321/local-model/v1" || settings.Model != "qwen2.5:0.5b" {
+		t.Fatalf("settings = %+v, want custom provider on the local model gateway", settings)
+	}
+	cfg := buildOpencodeConfig(settings)
+	if cfg["model"] != "custom/"+sanitizeModelAlias("qwen2.5:0.5b") {
+		t.Fatalf("opencode model = %v", cfg["model"])
+	}
+}
+
+func TestInjectAgentCredential_OpencodeGatewayRejectsOtherProviders(t *testing.T) {
+	host := newProxyCredentialTestHost(t, "workspace-token")
+	cred := proxyCredentialForTest("", "anthropic-proxy", "{controlPlaneUrl}/x", "m", "callback-token")
+	if err := injectProxyCredentialErrForTest(t, host, "opencode", cred); err == nil {
+		t.Fatal("expected an error for a non OpenAI-compatible gateway provider")
+	}
+}

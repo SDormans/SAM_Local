@@ -784,6 +784,11 @@ func ensureRepositoryReady(ctx context.Context, cfg *config.Config, state *boots
 		slog.Info("Repository is empty, skipping clone step")
 		return nil
 	}
+	if isLocalRepoProvider(cfg.RepoProvider) {
+		// Spec 036: local-desktop folders are bind-mounted in place, never cloned.
+		slog.Info("Local folder repository, skipping clone step", "repository", cfg.Repository)
+		return nil
+	}
 
 	branch := cfg.Branch
 	if branch == "" {
@@ -1240,6 +1245,18 @@ func fallbackToDefaultDevcontainer(
 func devcontainerUpArgs(cfg *config.Config, overrideConfigPath, devcontainerConfigName string) []string {
 	args := []string{"up", "--workspace-folder", cfg.WorkspaceDir}
 
+	if len(cfg.ExtraContainerLabels) > 0 || isLocalRepoProvider(cfg.RepoProvider) {
+		// --id-label replaces the CLI's default identity labels, so keep the lookup label too.
+		// Local folders need it even without extra labels: their lookup value is per workspace.
+		args = append(args, "--id-label", cfg.ContainerLabelKey+"="+cfg.ContainerLabelValue)
+		for _, label := range cfg.ExtraContainerLabels {
+			args = append(args, "--id-label", label)
+		}
+		if cfg.WorkspaceID != "" {
+			args = append(args, "--id-label", "sam.workspace="+cfg.WorkspaceID)
+		}
+	}
+
 	if devcontainerConfigName != "" {
 		args = append(args, "--config", namedDevcontainerConfigPath(cfg.WorkspaceDir, devcontainerConfigName))
 	}
@@ -1652,6 +1669,11 @@ func ensureWorkspaceOwnership(ctx context.Context, cfg *config.Config) error {
 	if user == "" || user == "root" {
 		return nil
 	}
+	if isLocalRepoProvider(cfg.RepoProvider) {
+		// Spec 036: /workspaces holds the user's own folder; never rewrite its ownership.
+		slog.Info("Local folder workspace, leaving ownership unchanged", "user", user)
+		return nil
+	}
 
 	containerID, err := findDevcontainerID(ctx, cfg)
 	if err != nil {
@@ -1751,7 +1773,11 @@ func writeMountOverrideConfig(ctx context.Context, cfg *config.Config, volumeNam
 	}
 
 	normalizeMergedLifecycleCommands(readResult.MergedConfiguration)
-	readResult.MergedConfiguration["workspaceMount"] = fmt.Sprintf("source=%s,target=/workspaces,type=volume", volumeName)
+	if isLocalRepoProvider(cfg.RepoProvider) {
+		readResult.MergedConfiguration["workspaceMount"] = localWorkspaceMount(cfg.Repository, repoDirName)
+	} else {
+		readResult.MergedConfiguration["workspaceMount"] = fmt.Sprintf("source=%s,target=/workspaces,type=volume", volumeName)
+	}
 	readResult.MergedConfiguration["workspaceFolder"] = fmt.Sprintf("/workspaces/%s", repoDirName)
 
 	// Add credential helper mount and containerEnv if a host path is provided.
@@ -1920,7 +1946,13 @@ func writeDefaultDevcontainerConfigForMode(cfg *config.Config, volumeName, credH
 	// adds supplementary mounts; workspaceMount in the config is the correct way
 	// to override the default workspace mount.
 	mountLines := ""
-	if volumeName != "" {
+	if isLocalRepoProvider(cfg.RepoProvider) {
+		// Spec 036: bind the user's folder in place instead of the workspace volume.
+		repoDirName := config.DeriveRepoDirName(cfg.Repository)
+		mount, _ := json.Marshal(localWorkspaceMount(cfg.Repository, repoDirName))
+		folder, _ := json.Marshal("/workspaces/" + repoDirName)
+		mountLines = fmt.Sprintf(",\n  \"workspaceMount\": %s,\n  \"workspaceFolder\": %s", mount, folder)
+	} else if volumeName != "" {
 		repoDirName := config.DeriveRepoDirName(cfg.Repository)
 		if repoDirName == "" {
 			repoDirName = filepath.Base(cfg.WorkspaceDir)
@@ -2388,6 +2420,11 @@ func writeCredentialHelperToHost(cfg *config.Config) (string, error) {
 	}
 	if cfg.Port <= 0 {
 		return "", fmt.Errorf("invalid VM agent port: %d", cfg.Port)
+	}
+
+	if isLocalRepoProvider(cfg.RepoProvider) {
+		// Spec 036: local folders keep the user's own Git setup; SAM injects no Git credentials.
+		return "", nil
 	}
 
 	script, err := renderGitCredentialHelperScript(cfg)
@@ -3303,4 +3340,15 @@ func saveState(path string, state *bootstrapState) error {
 	}
 
 	return os.WriteFile(path, encoded, 0o600)
+}
+
+// localWorkspaceMount binds a local desktop folder at the same /workspaces/<name> the rest of the
+// agent derives from the repository (config.DeriveRepoDirName), so hooks and commands agree.
+func localWorkspaceMount(folder, repoDirName string) string {
+	return fmt.Sprintf("source=%s,target=/workspaces/%s,type=bind", folder, repoDirName)
+}
+
+// isLocalRepoProvider reports spec 036 local-desktop folders, which are used in place.
+func isLocalRepoProvider(provider string) bool {
+	return strings.EqualFold(strings.TrimSpace(provider), "local")
 }

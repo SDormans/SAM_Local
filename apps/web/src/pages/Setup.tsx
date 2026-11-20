@@ -3,8 +3,13 @@ import { ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
+import { LocalRuntimeSetup } from '../components/LocalRuntimeSetup';
 import { PlatformIntegrationConfigForm } from '../components/PlatformIntegrationConfigForm';
-import type { PlatformConfigStatus, PlatformIntegrationConfigInput, SetupStatusResponse } from '../lib/api';
+import type {
+  PlatformConfigStatus,
+  PlatformIntegrationConfigInput,
+  SetupStatusResponse,
+} from '../lib/api';
 import {
   ApiClientError,
   completeSetup,
@@ -12,8 +17,14 @@ import {
   saveSetupConfig,
   verifySetupToken,
 } from '../lib/api';
+import { getDesktopBridge } from '../lib/desktop-bridge';
 
 export function Setup() {
+  const desktop = getDesktopBridge();
+  return desktop ? <LocalRuntimeSetup bridge={desktop} /> : <HostedSetup />;
+}
+
+function HostedSetup() {
   const [setupStatus, setSetupStatus] = useState<SetupStatusResponse | null>(null);
   const [platformStatus, setPlatformStatus] = useState<PlatformConfigStatus | null>(null);
   const [token, setToken] = useState('');
@@ -88,7 +99,9 @@ export function Setup() {
       setPlatformStatus(response.status);
       setComplete(true);
       setVerified(false);
-      setSetupStatus((current) => current ? { ...current, completed: true, open: false } : current);
+      setSetupStatus((current) =>
+        current ? { ...current, completed: true, open: false } : current
+      );
       setMessage('Setup complete. Sign in to continue.');
     } catch (err) {
       setError(errorMessage(err, 'Failed to complete setup'));
@@ -137,7 +150,8 @@ export function Setup() {
           <div>
             <h1 className="text-2xl font-semibold">First-run setup</h1>
             <p className="mt-1 max-w-2xl text-sm text-fg-muted">
-              Enter the setup token from Cloudflare Worker variables, then configure platform sign-in and repository automation.
+              Enter the setup token from Cloudflare Worker variables, then configure platform
+              sign-in and repository automation.
             </p>
           </div>
           {setupStatus?.forced && (
@@ -149,11 +163,20 @@ export function Setup() {
 
         {!setupStatus?.tokenConfigured && (
           <Alert variant="warning">
-            SETUP_TOKEN is not configured on the Worker. Redeploy or set the plaintext Worker variable before continuing.
+            SETUP_TOKEN is not configured on the Worker. Redeploy or set the plaintext Worker
+            variable before continuing.
           </Alert>
         )}
-        {error && <Alert variant="error" onDismiss={() => setError(null)}>{error}</Alert>}
-        {message && <Alert variant="success" onDismiss={() => setMessage(null)}>{message}</Alert>}
+        {error && (
+          <Alert variant="error" onDismiss={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+        {message && (
+          <Alert variant="success" onDismiss={() => setMessage(null)}>
+            {message}
+          </Alert>
+        )}
 
         {!verified ? (
           <section className="rounded-lg border border-border-default bg-surface p-4">

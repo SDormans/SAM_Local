@@ -237,9 +237,13 @@ export function registerProjectUpdateRoute(crudRoutes: Hono<{ Bindings: Env }>):
     }
 
     // Only verify GitHub repository access for GitHub-backed projects.
-    // Artifacts projects carry a sentinel installationId but must not be routed
-    // through GitHub access verification (it would 404 on the sentinel).
-    if (existing.installationId && existing.repoProvider !== 'artifacts') {
+    // Artifacts and local-folder projects carry a sentinel installationId but must
+    // not be routed through GitHub access verification (it would 404 on the sentinel).
+    if (
+      existing.installationId &&
+      existing.repoProvider !== 'artifacts' &&
+      existing.repoProvider !== 'local'
+    ) {
       const installation = await requireOwnedInstallation(db, existing.installationId, userId);
       const accessToken = await requireGitHubUserAccessToken(c, userId);
       await assertRepositoryAccess(

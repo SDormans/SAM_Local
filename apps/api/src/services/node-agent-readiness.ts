@@ -5,7 +5,7 @@ const DEFAULT_NODE_AGENT_READY_POLL_INTERVAL_MS = 5000;
 
 export type NodeBackendBaseUrlEnv = Pick<
   Env,
-  'BASE_DOMAIN' | 'VM_AGENT_PROTOCOL' | 'VM_AGENT_PORT'
+  'BASE_DOMAIN' | 'VM_AGENT_PROTOCOL' | 'VM_AGENT_PORT' | 'SAM_RUNTIME_MODE' | 'LOCAL_VM_AGENT_PORT'
 >;
 
 type NodeAgentFetch = (
@@ -17,6 +17,10 @@ type NodeAgentFetch = (
 ) => Promise<Response>;
 
 export function getNodeBackendBaseUrl(nodeId: string, env: NodeBackendBaseUrlEnv): string {
+  if (env.SAM_RUNTIME_MODE === 'local') {
+    // Spec 036: the single local node agent publishes its port on loopback only.
+    return `http://127.0.0.1:${env.LOCAL_VM_AGENT_PORT || '8443'}`;
+  }
   const protocol = env.VM_AGENT_PROTOCOL || 'https';
   const port = env.VM_AGENT_PORT || '8443';
   // Two-level subdomain ({nodeId}.vm.{domain}) bypasses Cloudflare same-zone routing.
