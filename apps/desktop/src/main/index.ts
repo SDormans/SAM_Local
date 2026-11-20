@@ -22,7 +22,7 @@ import {
 } from 'electron';
 
 import { CLOSE_PROMPT, handleCloseRequest } from './lifecycle.js';
-import { resolveDataDirectory } from './local-data.js';
+import { LocalDataStore, resolveDataDirectory } from './local-data.js';
 import { probePrerequisites } from './prerequisites.js';
 import { isTrustedSender, selectProjectFolder } from './project-dialog.js';
 import { fetchKnownWorkspaces, reconcileWorkspaces } from './recovery.js';
@@ -33,6 +33,7 @@ import {
   sessionRenewalTimingFromEnv,
   type SupervisorStatus,
 } from './service-supervisor.js';
+import { parseUninstallArg, performUninstall, type UninstallChoice } from './uninstall.js';
 import { DockerDesktopDriver } from './workspaces/docker-desktop.js';
 import {
   DEFAULT_LOCAL_NODE_IMAGE,
@@ -282,7 +283,31 @@ async function launch(): Promise<void> {
   await mainWindow.loadURL(`${appOrigin}${ready ? '/projects/new' : '/setup'}`);
 }
 
-if (!app.requestSingleInstanceLock()) {
+const uninstallChoice = parseUninstallArg(process.argv);
+
+async function runUninstall(choice: UninstallChoice): Promise<void> {
+  const dataDir = resolveDataDirectory();
+  const installation = await new LocalDataStore(dataDir).readInstallation().catch(() => null);
+  const result = await performUninstall({
+    choice,
+    dataDir,
+    removeContainers: async () => {
+      if (!installation) throw new Error('No SAM installation record found');
+      return new DockerDesktopDriver(installation.installationId).removeAll();
+    },
+  });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
+if (uninstallChoice) {
+  void runUninstall(uninstallChoice).then(
+    () => app.exit(0),
+    (error: unknown) => {
+      process.stderr.write(`${(error as Error).message}\n`);
+      app.exit(1);
+    }
+  );
+} else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
