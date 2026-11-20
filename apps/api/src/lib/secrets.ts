@@ -9,8 +9,13 @@
  * misconfigured CI/CD pipelines also trigger the fallback.
  */
 
+import { registerLocalSecretBroker } from '../local/local-secret-broker';
+
 interface SecretsEnv {
   ENCRYPTION_KEY: string;
+  SAM_RUNTIME_MODE?: string;
+  LOCAL_SECRET_BROKER_URL?: string;
+  LOCAL_BOOTSTRAP_SECRET?: string;
   BETTER_AUTH_SECRET?: string;
   CREDENTIAL_ENCRYPTION_KEY?: string;
 }
@@ -22,5 +27,7 @@ export function getBetterAuthSecret(env: SecretsEnv): string {
 
 /** Key used for AES-GCM encryption of user credentials (cloud tokens, etc.). */
 export function getCredentialEncryptionKey(env: SecretsEnv): string {
+  // Desktop runtime: lets decrypt() resolve credentials held by the desktop credential store.
+  registerLocalSecretBroker(env);
   return env.CREDENTIAL_ENCRYPTION_KEY || env.ENCRYPTION_KEY;
 }

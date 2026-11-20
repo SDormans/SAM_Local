@@ -33,6 +33,7 @@ export interface LocalWranglerConfigOptions {
   localDefaultModel?: string;
   /** Built `apps/web` output served same-origin with the API; omitted for API-only runs. */
   webDistDir?: string;
+  secretBrokerUrl?: string;
 }
 
 /** API paths that must reach the Worker even when a static asset could match. */
@@ -80,6 +81,7 @@ export function buildLocalWranglerConfig(
       : {}),
     ...(options.nodeAgentPort ? { LOCAL_VM_AGENT_PORT: String(options.nodeAgentPort) } : {}),
     ...(options.localDefaultModel ? { LOCAL_DEFAULT_MODEL: options.localDefaultModel } : {}),
+    ...(options.secretBrokerUrl ? { LOCAL_SECRET_BROKER_URL: options.secretBrokerUrl } : {}),
   };
   if (options.webDistDir) {
     if (!isAbsolute(options.webDistDir)) throw new Error('webDistDir must be absolute');

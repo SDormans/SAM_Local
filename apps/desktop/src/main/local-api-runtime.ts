@@ -26,6 +26,8 @@ export interface LocalApiRuntimeOptions {
   sessionTtlSeconds?: number;
   nodeAgentPort?: number;
   localDefaultModel?: string;
+  /** Loopback desktop credential store (spec 036 T035). */
+  secretBrokerUrl?: string;
   /** Built `apps/web` output to serve same-origin with the API. */
   webDistDir?: string;
   onOutput?: (chunk: string) => void;
@@ -63,6 +65,7 @@ export async function writeLocalRuntimeFiles(
     | 'sessionTtlSeconds'
     | 'nodeAgentPort'
     | 'localDefaultModel'
+    | 'secretBrokerUrl'
     | 'webDistDir'
   >
 ): Promise<string> {
@@ -76,6 +79,7 @@ export async function writeLocalRuntimeFiles(
       sessionTtlSeconds: options.sessionTtlSeconds,
       nodeAgentPort: options.nodeAgentPort,
       localDefaultModel: options.localDefaultModel,
+      secretBrokerUrl: options.secretBrokerUrl,
       webDistDir: options.webDistDir,
     })
   );

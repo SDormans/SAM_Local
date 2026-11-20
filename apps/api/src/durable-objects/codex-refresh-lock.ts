@@ -36,8 +36,9 @@ import * as v from 'valibot';
 import { log } from '../lib/logger';
 import { maybeJsonRecord, readResponseJson } from '../lib/runtime-validation';
 import { getCredentialEncryptionKey } from '../lib/secrets';
+import { sealCredential } from '../local/local-secret-store';
 import { syncActiveAgentCredentialSecret } from '../services/composable-credentials/agent-sync';
-import { decrypt, encrypt } from '../services/encryption';
+import { decrypt } from '../services/encryption';
 import {
   type CodexRefreshEnv,
   DEFAULT_CLIENT_ID,
@@ -417,7 +418,7 @@ export class CodexRefreshLock extends DurableObject<CodexRefreshEnv> {
 
     // Re-encrypt with fresh IV and update the database.
     const updatedAuthJson = JSON.stringify(storedAuth);
-    const { ciphertext, iv } = await encrypt(updatedAuthJson, encryptionKey);
+    const { ciphertext, iv } = await sealCredential(this.env, updatedAuthJson);
 
     const db = this.env.DATABASE;
     await db

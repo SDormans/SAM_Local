@@ -26,6 +26,7 @@ import { getCredentialEncryptionKey } from '../../lib/secrets';
 import { ulid } from '../../lib/ulid';
 import { resolveLocalOpencodeInferenceConfig } from '../../local/local-inference';
 import { readLocalModelConnection } from '../../local/local-models';
+import { sealCredential } from '../../local/local-secret-store';
 import { isLocalRuntime } from '../../local/runtime-mode';
 import { requireApproved, requireAuth } from '../../middleware/auth';
 import { errors } from '../../middleware/error';
@@ -40,7 +41,7 @@ import {
 import { appendBootLog } from '../../services/boot-log';
 import { registerBootstrapTokenConsume } from '../../services/bootstrap';
 import { syncActiveAgentCredentialSecret } from '../../services/composable-credentials/agent-sync';
-import { decrypt, encrypt } from '../../services/encryption';
+import { decrypt } from '../../services/encryption';
 import { getInstallationToken, getUserInstallationRepositories } from '../../services/github-app';
 import {
   GitHubCliPolicyError,
@@ -1419,7 +1420,7 @@ runtimeRoutes.post(
     }
 
     // Re-encrypt with a fresh IV and update.
-    const { ciphertext, iv } = await encrypt(body.credential, getCredentialEncryptionKey(c.env));
+    const { ciphertext, iv } = await sealCredential(c.env, body.credential);
     const update = await c.env.DATABASE.prepare(
       `UPDATE credentials
           SET encrypted_token = ?, iv = ?, updated_at = ?

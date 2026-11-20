@@ -22,12 +22,11 @@ import { drizzle } from 'drizzle-orm/d1';
 
 import * as schema from '../db/schema';
 import type { Env } from '../env';
-import { getCredentialEncryptionKey } from '../lib/secrets';
 import { ulid } from '../lib/ulid';
+import { sealCredential } from '../local/local-secret-store';
 import { errors } from '../middleware/error';
 import { syncAgentCredentialToCC } from './composable-credentials/agent-sync';
 import { getClaudeOauthTokenMaxLength } from './credential-setup-config';
-import { encrypt } from './encryption';
 import { CredentialValidator } from './validation';
 
 export interface SaveAgentCredentialParams {
@@ -76,7 +75,7 @@ export async function saveAgentCredentialForUser(
   }
 
   const db = drizzle(env.DATABASE, { schema });
-  const { ciphertext, iv } = await encrypt(credential, getCredentialEncryptionKey(env));
+  const { ciphertext, iv } = await sealCredential(env, credential);
   const now = new Date().toISOString();
 
   const existing = await db
