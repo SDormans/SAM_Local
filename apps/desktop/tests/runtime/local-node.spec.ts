@@ -171,7 +171,7 @@ describe.runIf(imageAvailable())('local node agent', () => {
       headers,
       body: JSON.stringify({
         message: 'Reply with the single word: pong',
-        nodeId: localNodeId,
+        // No nodeId: local-runtime tasks default to this computer's node.
         agentType: 'opencode',
         taskMode: 'conversation',
       }),

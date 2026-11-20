@@ -27,6 +27,7 @@ import { log } from '../lib/logger';
 import { parsePositiveInt } from '../lib/route-helpers';
 import { markTaskSubmitOperation, type TaskSubmitOperation } from '../lib/task-submit-diagnostics';
 import { ulid } from '../lib/ulid';
+import { findRunningLocalNodeId } from '../local/local-node';
 import { isLocalRuntime } from '../local/runtime-mode';
 import { errors } from '../middleware/error';
 import { requireProjectCapability } from '../middleware/project-auth';
@@ -250,6 +251,22 @@ export async function submitTaskImplementation(
       ancestorTaskId = ancestor.parentTaskId;
       forkDepth += 1;
     }
+  }
+
+  if (!body.nodeId && isLocalRuntime(env)) {
+    // Spec 036: desktop tasks run on this computer's node; there is no cloud placement to fall back to.
+    const localNodeId = await findRunningLocalNodeId(env, userId);
+    if (!localNodeId) {
+      throw errors.badRequest(
+        'This computer is not ready to run agents. Check Docker Desktop on the SAM setup page, then try again.'
+      );
+    }
+    // OpenCode is the first local agent; an explicit agent or profile choice still wins.
+    const defaultAgent =
+      !body.agentType && !body.agentProfileId && !body.skillId
+        ? { agentType: 'opencode' as const }
+        : {};
+    body = { ...body, nodeId: localNodeId, ...defaultAgent };
   }
 
   let localUserOwnedNode = false;

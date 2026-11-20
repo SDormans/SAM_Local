@@ -71,3 +71,20 @@ export async function ensureLocalNode(
     .where(eq(schema.nodes.id, nodeId));
   return { nodeId, callbackToken: await signNodeCallbackToken(nodeId, env) };
 }
+
+/** The installation's running local node; local-runtime tasks run there by default. */
+export async function findRunningLocalNodeId(env: Env, userId: string): Promise<string | null> {
+  const db = drizzle(env.DATABASE, { schema });
+  const [row] = await db
+    .select({ id: schema.nodes.id })
+    .from(schema.nodes)
+    .where(
+      and(
+        eq(schema.nodes.userId, userId),
+        eq(schema.nodes.transport, LOCAL_NODE_TRANSPORT),
+        eq(schema.nodes.status, 'running')
+      )
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
