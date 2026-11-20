@@ -1,5 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render as rtlRender, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocalModelConnection } from '../../../src/components/LocalModelConnection';
@@ -9,6 +11,13 @@ vi.mock('../../../src/lib/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/lib/api/client')>()),
   request: vi.fn(),
 }));
+
+vi.mock('../../../src/hooks/useQueryScope', () => ({ useQueryScope: () => 'user-1' }));
+
+function render(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return rtlRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 describe('LocalModelConnection', () => {
   beforeEach(() => vi.mocked(request).mockReset());

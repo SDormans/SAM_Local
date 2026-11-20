@@ -1,6 +1,8 @@
 import { Alert, Button } from '@simple-agent-manager/ui';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
+import { useQueryScope } from '../hooks/useQueryScope';
 import { ApiClientError, request } from '../lib/api/client';
 
 interface Connection {
@@ -28,45 +30,57 @@ const fieldClass =
 
 /** Spec 036 T028: the local model service OpenCode uses when set to "Model on this computer". */
 export function LocalModelConnection() {
+  const scope = useQueryScope();
+  const queryClient = useQueryClient();
+  const queryKey = ['auth', scope, 'local', 'models', 'connection'];
   const [form, setForm] = useState(DEFAULTS);
-  const [saved, setSaved] = useState<Connection | null>(null);
-  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
-  useEffect(() => {
-    request<Connection>('/api/local/models/connection')
-      .then((c) => {
-        if (typeof c?.baseUrl !== 'string' || typeof c.modelId !== 'string') return;
-        setSaved(c);
-        setForm({ providerType: c.providerType, baseUrl: c.baseUrl, modelId: c.modelId });
-      })
-      .catch((err: unknown) => {
-        if (!(err instanceof ApiClientError && err.status === 404)) {
-          setResult({ ok: false, text: 'Could not load the local model settings.' });
-        }
-      });
-  }, []);
+  const connectionQuery = useQuery({
+    queryKey,
+    enabled: Boolean(scope),
+    queryFn: async () => {
+      try {
+        return await request<Connection>('/api/local/models/connection');
+      } catch (err) {
+        if (err instanceof ApiClientError && err.status === 404) return null;
+        throw err;
+      }
+    },
+  });
+  const saved =
+    typeof connectionQuery.data?.baseUrl === 'string' &&
+    typeof connectionQuery.data.modelId === 'string'
+      ? connectionQuery.data
+      : null;
 
-  const saveAndCheck = async () => {
-    setBusy(true);
-    setResult(null);
-    try {
+  useEffect(() => {
+    if (saved) {
+      setForm({ providerType: saved.providerType, baseUrl: saved.baseUrl, modelId: saved.modelId });
+    }
+  }, [saved?.providerType, saved?.baseUrl, saved?.modelId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveAndCheck = useMutation({
+    mutationFn: async () => {
       const connection = await request<Connection>('/api/local/models/connection', {
         method: 'PUT',
         body: JSON.stringify(form),
       });
-      setSaved(connection);
-      const check = await request<Verification>('/api/local/models/connection/verify', {
+      queryClient.setQueryData(queryKey, connection);
+      return request<Verification>('/api/local/models/connection/verify', {
         method: 'POST',
         body: JSON.stringify({ connectionId: connection.connectionId }),
       });
+    },
+    onMutate: () => setResult(null),
+    onSuccess: (check) => {
       setResult({ ok: true, text: `Connected. ${check.models.length} model(s) available.` });
-    } catch (err) {
-      setResult({ ok: false, text: err instanceof Error ? err.message : 'Could not save' });
-    } finally {
-      setBusy(false);
-    }
-  };
+      void queryClient.invalidateQueries({ queryKey });
+    },
+    onError: (err) =>
+      setResult({ ok: false, text: err instanceof Error ? err.message : 'Could not save' }),
+  });
+  const loadError = connectionQuery.error ? 'Could not load the local model settings.' : null;
 
   return (
     <section
@@ -113,6 +127,7 @@ export function LocalModelConnection() {
           onChange={(e) => setForm({ ...form, modelId: e.target.value })}
         />
       </label>
+      {loadError && !result && <Alert variant="error">{loadError}</Alert>}
       {result && <Alert variant={result.ok ? 'success' : 'error'}>{result.text}</Alert>}
       {saved?.lastVerifiedAt && !result && (
         <p className="text-xs text-fg-muted">
@@ -122,9 +137,9 @@ export function LocalModelConnection() {
       <Button
         type="button"
         className="min-h-14 w-full sm:w-auto"
-        loading={busy}
+        loading={saveAndCheck.isPending}
         disabled={!form.baseUrl.trim() || !form.modelId.trim()}
-        onClick={() => void saveAndCheck()}
+        onClick={() => saveAndCheck.mutate()}
       >
         Save and check
       </Button>
