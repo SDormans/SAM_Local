@@ -23,7 +23,11 @@ export async function launchDesktop(
 ): Promise<{ app: ElectronApplication; window: Page }> {
   const app = await electron.launch({
     args: [desktopDir],
-    env: envWithoutCloudflare({ SAM_LOCAL_DATA_DIR: dataDir, SAM_LOCAL_API_PORT: String(PORT) }),
+    env: envWithoutCloudflare({
+      SAM_LOCAL_DATA_DIR: dataDir,
+      SAM_LOCAL_API_PORT: String(PORT),
+      SAM_LOCAL_WORKSPACES: 'off',
+    }),
     timeout: 120_000,
   });
   const window = await app.firstWindow();

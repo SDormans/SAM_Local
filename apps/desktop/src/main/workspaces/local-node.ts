@@ -6,9 +6,9 @@
  * 3. Register the node with the local API (bootstrap secret) to get its callback token.
  * 4. Run the node agent container with its port published on loopback only.
  */
-import { type RunningControlRelay,startControlRelay } from '../control-relay.js';
+import { type RunningControlRelay, startControlRelay } from '../control-relay.js';
 import { LOCAL_BASE_DOMAIN } from '../local-runtime-config.js';
-import { type CleanupReport,type DockerDesktopDriver } from './docker-desktop.js';
+import { type CleanupReport, type DockerDesktopDriver } from './docker-desktop.js';
 
 export const NODE_AGENT_CONTAINER_PORT = 8443;
 export const DEFAULT_LOCAL_NODE_IMAGE = 'sam-local-node:dev';

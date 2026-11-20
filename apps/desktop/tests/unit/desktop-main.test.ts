@@ -253,6 +253,51 @@ describe('ServiceSupervisor', () => {
     expect(await sup.stop()).toMatchObject({ state: 'stopped' });
   });
 
+  it('starts and stops the local workspace runtime with the service', async () => {
+    const runtime = { stop: vi.fn(async () => undefined) };
+    const startWorkspaceRuntime = vi.fn(async () => runtime);
+    const { sup } = supervisor({ startWorkspaceRuntime, nodeAgentPort: 8791 });
+    const status = await sup.start();
+    expect(status.workspaceRuntimeError).toBeUndefined();
+    expect(startWorkspaceRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ apiUrl: 'http://127.0.0.1:9', bootstrapSecret: expect.any(String) })
+    );
+    await sup.stop();
+    expect(runtime.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the service running and reports why local workspaces are unavailable', async () => {
+    const output: string[] = [];
+    const { sup } = supervisor({
+      startWorkspaceRuntime: async () => {
+        throw new Error('Start Docker Desktop, then retry.');
+      },
+      onOutput: (chunk) => output.push(chunk),
+    });
+    const status = await sup.start();
+    expect(status).toMatchObject({
+      state: 'running',
+      workspaceRuntimeError: 'Local workspaces are unavailable: Start Docker Desktop, then retry.',
+    });
+    expect(output.join('')).toContain('Local workspaces unavailable');
+    expect(await sup.stop()).toMatchObject({ state: 'stopped' });
+  });
+
+  it('logs but tolerates a failing node stop', async () => {
+    const output: string[] = [];
+    const { sup } = supervisor({
+      startWorkspaceRuntime: async () => ({
+        stop: async () => {
+          throw new Error('docker gone');
+        },
+      }),
+      onOutput: (chunk) => output.push(chunk),
+    });
+    await sup.start();
+    expect(await sup.stop()).toMatchObject({ state: 'stopped' });
+    expect(output.join('')).toContain('Local node stop failed');
+  });
+
   it('reports an unexpected runtime exit as failed', async () => {
     const { sup, api } = supervisor();
     await sup.start();

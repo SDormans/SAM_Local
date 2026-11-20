@@ -3,6 +3,7 @@
  * The renderer is sandboxed with context isolation, may only navigate within the local
  * loopback origin, and talks to the main process through the narrow preload bridge.
  */
+import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,19 +31,44 @@ import {
   sessionRenewalTimingFromEnv,
   type SupervisorStatus,
 } from './service-supervisor.js';
+import { DockerDesktopDriver } from './workspaces/docker-desktop.js';
+import {
+  DEFAULT_LOCAL_NODE_IMAGE,
+  defaultProjectsRoot,
+  LocalNode,
+} from './workspaces/local-node.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../../../..');
 const DEFAULT_PORT = 8790;
+const DEFAULT_NODE_AGENT_PORT = 8791;
 
 const port = Number(process.env.SAM_LOCAL_API_PORT ?? DEFAULT_PORT);
+const nodeAgentPort = Number(process.env.SAM_LOCAL_NODE_AGENT_PORT ?? DEFAULT_NODE_AGENT_PORT);
 const renewalTiming = sessionRenewalTimingFromEnv(process.env);
 const supervisor = new ServiceSupervisor({
   apiDir: process.env.SAM_DESKTOP_API_DIR ?? join(repoRoot, 'apps/api'),
   webDistDir: process.env.SAM_DESKTOP_WEB_DIST ?? join(repoRoot, 'apps/web/dist'),
   dataDir: resolveDataDirectory(),
   port,
+  nodeAgentPort,
   probePrerequisites: () => probePrerequisites(),
+  startWorkspaceRuntime:
+    process.env.SAM_LOCAL_WORKSPACES === 'off'
+      ? undefined
+      : async ({ apiUrl, bootstrapSecret, installationId }) => {
+          const node = new LocalNode(new DockerDesktopDriver(installationId));
+          await node.start({
+            apiUrl,
+            bootstrapSecret,
+            image: process.env.SAM_LOCAL_NODE_IMAGE ?? DEFAULT_LOCAL_NODE_IMAGE,
+            hostPort: nodeAgentPort,
+            projectsRoot:
+              process.env.SAM_LOCAL_PROJECTS_ROOT ??
+              defaultProjectsRoot(process.platform, homedir()),
+          });
+          return node;
+        },
 });
 const appOrigin = `http://127.0.0.1:${port}`;
 
