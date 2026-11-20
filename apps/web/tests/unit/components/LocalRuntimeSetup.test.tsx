@@ -1,8 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ request: vi.fn() }));
+
+vi.mock('../../../src/hooks/useQueryScope', () => ({ useQueryScope: () => 'local-test' }));
 
 vi.mock('../../../src/lib/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/lib/api/client')>()),
@@ -11,6 +13,7 @@ vi.mock('../../../src/lib/api/client', async (importOriginal) => ({
 
 import { LocalRuntimeSetup } from '../../../src/components/LocalRuntimeSetup';
 import type { SamDesktopBridge } from '../../../src/lib/desktop-bridge';
+import { renderWithQuery } from '../../test-utils/query-test-utils';
 
 function bridge(): SamDesktopBridge {
   return {
@@ -35,7 +38,7 @@ describe('LocalRuntimeSetup', () => {
       message: 'Docker Desktop is not running. Start Docker Desktop and retry.',
     });
     const desktop = bridge();
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <LocalRuntimeSetup bridge={desktop} />
       </MemoryRouter>
@@ -66,7 +69,7 @@ describe('LocalRuntimeSetup', () => {
     desktop.refreshPrerequisites = vi.fn(async () => {
       throw new Error('probe failed');
     });
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <LocalRuntimeSetup bridge={desktop} />
       </MemoryRouter>

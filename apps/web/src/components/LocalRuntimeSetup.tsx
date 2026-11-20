@@ -1,7 +1,9 @@
 import { Alert, Button, Spinner } from '@simple-agent-manager/ui';
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link } from 'react-router';
 
+import { useQueryScope } from '../hooks/useQueryScope';
 import { request } from '../lib/api/client';
 import type { SamDesktopBridge } from '../lib/desktop-bridge';
 
@@ -36,30 +38,30 @@ function StatusRow({ name, value }: { name: string; value: string }) {
 
 /** Desktop first-run prerequisite and local-store status (spec 036 T014). */
 export function LocalRuntimeSetup({ bridge }: { bridge: SamDesktopBridge }) {
-  const [health, setHealth] = useState<LocalRuntimeHealth | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const scope = useQueryScope();
+  const healthQuery = useQuery({
+    queryKey: ['auth', scope, 'local', 'health'],
+    queryFn: () => request<LocalRuntimeHealth>('/api/local/health'),
+    enabled: Boolean(scope),
+  });
+  const [recheckError, setRecheckError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      setHealth(await request<LocalRuntimeHealth>('/api/local/health'));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not read local SAM status');
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const health = healthQuery.data ?? null;
+  const loadError = healthQuery.error
+    ? healthQuery.error instanceof Error
+      ? healthQuery.error.message
+      : 'Could not read local SAM status'
+    : null;
+  const error = recheckError ?? loadError;
 
   const recheck = async () => {
     setChecking(true);
+    setRecheckError(null);
     try {
       await bridge.refreshPrerequisites();
-      await load();
+      await healthQuery.refetch();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not check prerequisites');
+      setRecheckError(err instanceof Error ? err.message : 'Could not check prerequisites');
     } finally {
       setChecking(false);
     }
