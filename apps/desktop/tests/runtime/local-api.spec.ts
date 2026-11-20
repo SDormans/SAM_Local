@@ -244,6 +244,9 @@ describe('local API runtime', () => {
       (await create({ name: 'Again', repoProvider: 'local', localPath: 'C:\\code\\demo' })).status
     ).toBe(409);
     expect(
+      (await create({ name: 'Same', repoProvider: 'local', localPath: 'c:/Code/Demo/' })).status
+    ).toBe(409);
+    expect(
       (await create({ name: 'Rel', repoProvider: 'local', localPath: 'code/demo' })).status
     ).toBe(400);
     const list = await (await fetch(`${base}/api/projects`, { headers: { cookie } })).json();

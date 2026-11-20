@@ -6,7 +6,10 @@ import {
   summarizeLocalHealth,
   writeLocalPrerequisites,
 } from '../../../src/local/local-health';
-import { normalizeLocalProjectPath } from '../../../src/routes/projects/project-create';
+import {
+  localProjectPathKey,
+  normalizeLocalProjectPath,
+} from '../../../src/routes/projects/project-create';
 
 function kvEnv() {
   const store = new Map<string, string>();
@@ -71,7 +74,13 @@ describe('normalizeLocalProjectPath', () => {
     expect(normalizeLocalProjectPath('C:\\Users\\me\\code\\demo\\')).toBe(
       'C:\\Users\\me\\code\\demo'
     );
-    expect(normalizeLocalProjectPath('D:/work/app')).toBe('D:/work/app');
+    expect(normalizeLocalProjectPath('D:/work/app')).toBe('D:\\work\\app');
+    expect(normalizeLocalProjectPath('c:/code//demo/')).toBe('C:\\code\\demo');
+    expect(normalizeLocalProjectPath('/home//me/app')).toBe('/home/me/app');
+    expect(localProjectPathKey(normalizeLocalProjectPath('C:\\Code\\Demo'))).toBe(
+      localProjectPathKey(normalizeLocalProjectPath('c:/code/demo'))
+    );
+    expect(localProjectPathKey('/home/Me')).not.toBe(localProjectPathKey('/home/me'));
     expect(normalizeLocalProjectPath(' /home/me/app/ ')).toBe('/home/me/app');
     expect(normalizeLocalProjectPath('C:\\')).toBe('C:\\');
     expect(normalizeLocalProjectPath('/')).toBe('/');

@@ -47,7 +47,17 @@ export function normalizeLocalProjectPath(input: string | undefined): string {
   if (path.split(/[\\/]/).includes('..')) {
     throw errors.badRequest('localPath must not contain ".." segments');
   }
-  return path.length > 3 ? path.replace(/[\\/]+$/, '') : path;
+  if (WINDOWS_ABSOLUTE_PATH.test(path)) {
+    const windows = `${path[0]!.toUpperCase()}${path.slice(1).replace(/[\\/]+/g, '\\')}`;
+    return windows.length > 3 ? windows.replace(/\\$/, '') : windows;
+  }
+  const posix = path.replace(/\/+/g, '/');
+  return posix.length > 1 ? posix.replace(/\/$/, '') : posix;
+}
+
+/** Comparison key for a normalized local path: Windows paths are case-insensitive. */
+export function localProjectPathKey(normalizedPath: string): string {
+  return WINDOWS_ABSOLUTE_PATH.test(normalizedPath) ? normalizedPath.toLowerCase() : normalizedPath;
 }
 
 export function registerProjectCreateRoute(crudRoutes: Hono<{ Bindings: Env }>): void {
@@ -104,18 +114,13 @@ export function registerProjectCreateRoute(crudRoutes: Hono<{ Bindings: Env }>):
         throw errors.badRequest('Local folder projects are only available in the desktop app');
       }
       const localPath = normalizeLocalProjectPath(body.localPath);
-      const duplicateLocalRows = await db
-        .select({ id: schema.projects.id })
+      // Bounded by maxProjectsPerUser (checked above).
+      const localRows = await db
+        .select({ repository: schema.projects.repository })
         .from(schema.projects)
-        .where(
-          and(
-            eq(schema.projects.userId, userId),
-            eq(schema.projects.repoProvider, 'local'),
-            eq(schema.projects.repository, localPath)
-          )
-        )
-        .limit(1);
-      if (duplicateLocalRows[0]) {
+        .where(and(eq(schema.projects.userId, userId), eq(schema.projects.repoProvider, 'local')));
+      const pathKey = localProjectPathKey(localPath);
+      if (localRows.some((row) => localProjectPathKey(row.repository) === pathKey)) {
         throw errors.conflict('A project for this folder already exists');
       }
       await db.insert(schema.projects).values({
