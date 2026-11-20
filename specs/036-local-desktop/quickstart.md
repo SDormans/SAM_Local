@@ -118,3 +118,44 @@ The e2e suite (3 tests) proves:
 The web UI is the normal `apps/web` build, served same-origin by the local Worker through wrangler `[assets]`.
 
 **Still open for the owner on Windows (T002):** an installer package, the tray icon artwork, and Windows process-tree stop.
+
+## T040 Validation (Linux, 2026-11-20)
+
+These are Linux results. The Windows package and e2e commands are still for the owner to run.
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @simple-agent-manager/desktop test:coverage` | 106 tests passed. Coverage: 94.02% statements, 87.06% branches, 90.22% functions, 96.33% lines (gate 90%/80%: passes) |
+| `cd apps/api && pnpm exec vitest run tests/unit/local-mode tests/integration/hosted-inference-regression.test.ts --coverage --coverage.include='src/local/**'` | 42 tests passed. Coverage of `src/local`: 92.24% statements, 91.39% branches, 94.11% functions, 92.09% lines |
+| `pnpm --filter @simple-agent-manager/desktop test:runtime` | Real `apps/api` under workerd, including the packaged-version upgrade (T032) and local node registration (covers `src/local/local-node.ts`) |
+| `xvfb-run -a pnpm exec playwright test` (desktop e2e) | first-run, close-behavior, inference-settings, local-first-agent, data-retention, model-routing; each passed when last run |
+| `cd packages/vm-agent && go test ./...` (Go 1.26.6) | all packages passed |
+| `cd apps/api && pnpm exec tsc --noEmit` | passed |
+| Full API suite (`pnpm --filter @simple-agent-manager/api test`) | 13,441 tests passed at the T035 checkpoint |
+
+Coverage per area:
+
+| Area | Files | Coverage |
+| --- | --- | --- |
+| Local auth/ownership | `local-auth.ts`, `runtime-mode.ts` | 100% lines |
+| Workspace lifecycle/cleanup | `docker-desktop.ts`, `recovery.ts` | >90% lines |
+| Persistence, migration, recovery | `local-data.ts`, `runtime-secrets.ts` | >94% lines |
+| Credential storage | `credential-store.ts`, `local-secret-*.ts` | >94% lines |
+| Inference routing/gateway | `model-gateway.ts`, `local-inference.ts`, `local-models.ts` | >96% lines |
+
+### Principle XI audit (new ports, timeouts, paths, limits, URLs)
+
+| Value | Where | Configurable |
+| --- | --- | --- |
+| API port `8790`, node agent port `8791` | `apps/desktop/src/main/index.ts` | `SAM_LOCAL_API_PORT`, `SAM_LOCAL_NODE_AGENT_PORT` |
+| Model service `http://127.0.0.1:11434` | `workspaces/local-node.ts` | `SAM_LOCAL_MODEL_SERVICE_URL`; also saved in Setup > Local model |
+| Default model | supervisor | `SAM_LOCAL_DEFAULT_MODEL` |
+| Node image | supervisor | `SAM_LOCAL_NODE_IMAGE` |
+| Data directory | `local-data.ts` | `SAM_LOCAL_DATA_DIR` |
+| Local session TTL (24 h, minimum 60 s) | `apps/api/src/local/local-auth.ts` | `LOCAL_SESSION_TTL_SECONDS` |
+| Session renewal margins | `service-supervisor.ts` | exported defaults that callers can override |
+| Model verify timeout 5 s | `apps/api/src/local/local-models.ts` | constant; a fixed probe timeout |
+| Credential sweep minimum age 10 min, broker body limit 256 KiB | `local-secret-store.ts`, `credential-store.ts` | constants; fixed safety bounds, not tunables |
+| Loopback hosts `127.0.0.1`, `sam.localhost` | runtime config | fixed by the FR-018 security boundary |
+
+The fixed values are safety bounds or protocol constants. None of them is a deployment URL or a per-environment setting.

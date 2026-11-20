@@ -31,6 +31,21 @@ describe('uninstall', () => {
     await expect(stat(join(dir, 'installation.json'))).resolves.toBeTruthy();
   });
 
+  it('delete tolerates a data directory that is already gone', async () => {
+    const dir = await dataDir();
+    const result = await performUninstall({
+      choice: 'delete',
+      dataDir: join(dir, 'missing'),
+      removeContainers: async () => {
+        throw 'no docker';
+      },
+    });
+    expect(result).toMatchObject({
+      choice: 'delete',
+      containers: { skipped: 'Docker is not available' },
+    });
+  });
+
   it('delete removes local data even when Docker is unavailable', async () => {
     const dir = await dataDir();
     const result = await performUninstall({

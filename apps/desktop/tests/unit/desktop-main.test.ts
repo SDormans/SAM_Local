@@ -236,6 +236,41 @@ describe('ServiceSupervisor', () => {
     return { sup, api };
   }
 
+  it('starts local workspaces when Docker becomes ready on a recheck', async () => {
+    let docker: 'stopped' | 'ready' = 'stopped';
+    const runtime = { stop: vi.fn(async () => undefined) };
+    const startWorkspaceRuntime = vi.fn(async () => {
+      if (docker !== 'ready') throw new Error('Docker Desktop is not running');
+      return runtime;
+    });
+    const { sup } = supervisor({
+      probePrerequisites: async () => ({ dockerDesktop: docker, wsl2: 'ready' }),
+      startWorkspaceRuntime,
+    });
+    expect((await sup.start()).workspaceRuntimeError).toMatch(/unavailable/);
+    docker = 'ready';
+    await sup.reportPrerequisites();
+    expect(startWorkspaceRuntime).toHaveBeenCalledTimes(2);
+    expect(sup.status).toMatchObject({ state: 'running' });
+    expect(sup.status.workspaceRuntimeError).toBeUndefined();
+    await sup.reportPrerequisites();
+    expect(startWorkspaceRuntime).toHaveBeenCalledTimes(2);
+    await sup.stop();
+    expect(runtime.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops local workspaces on quit even after the API crashed', async () => {
+    const runtime = { stop: vi.fn(async () => undefined) };
+    const { sup, api } = supervisor({ startWorkspaceRuntime: async () => runtime });
+    await sup.start();
+    api.crash();
+    await api.exited;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sup.status.state).toBe('failed');
+    expect((await sup.stop()).state).toBe('stopped');
+    expect(runtime.stop).toHaveBeenCalledTimes(1);
+  });
+
   it('starts, issues the local session, reports prerequisites, and counts active work', async () => {
     const { sup } = supervisor();
     const states: string[] = [];
