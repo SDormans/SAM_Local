@@ -7,7 +7,7 @@ import { getProjectGitLabRepository } from './gitlab';
 type Db = ReturnType<typeof drizzle<typeof schema>>;
 
 export type WorkspaceGitSource = {
-  repoProvider: 'github' | 'artifacts' | 'gitlab';
+  repoProvider: 'github' | 'artifacts' | 'gitlab' | 'local';
   cloneUrl: string | null;
   repositoryHost: string | null;
   repositoryPath: string | null;
@@ -40,11 +40,8 @@ export async function resolveWorkspaceGitSource(
   project: WorkspaceGitSourceProject
 ): Promise<WorkspaceGitSource> {
   if (project.repoProvider === 'local') {
-    // Spec 036: local folders are mounted by the desktop workspace driver, never cloned.
-    throw Object.assign(
-      new Error(`Project ${project.id} is a local folder and cannot be cloned onto a remote VM`),
-      { permanent: true }
-    );
+    // Spec 036: the node agent bind-mounts the local folder in place; nothing is cloned.
+    return { ...DEFAULT_GITHUB_SOURCE, repoProvider: 'local' };
   }
   const repoProvider = normalizeRepoProvider(project.repoProvider);
   if (repoProvider !== 'gitlab') {

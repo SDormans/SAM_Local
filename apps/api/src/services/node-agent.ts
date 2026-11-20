@@ -389,7 +389,7 @@ export async function createWorkspaceOnNode(
     /** Existing remote branch used as the clone base when `branch` is new. */
     baseBranch?: string;
     defaultBranch?: string;
-    repoProvider?: 'github' | 'artifacts' | 'gitlab';
+    repoProvider?: 'github' | 'artifacts' | 'gitlab' | 'local';
     cloneUrl?: string | null;
     repositoryHost?: string | null;
     repositoryPath?: string | null;
