@@ -20,7 +20,9 @@ const apiDir = resolve(__dirname, '../../../api');
 // Stand-in for the wrangler CLI: `dev` serves /health on --port, `d1` exits per FAKE_D1_EXIT.
 const FAKE_WRANGLER = `#!/usr/bin/env node
 const args = process.argv.slice(2);
-require('node:fs').writeFileSync(process.cwd() + '/args.json', JSON.stringify({ args, cf: Object.keys(process.env).filter(k => k.startsWith('CF_') || k.startsWith('CLOUDFLARE_')) }));
+const record = JSON.stringify({ args, cf: Object.keys(process.env).filter(k => k.startsWith('CF_') || k.startsWith('CLOUDFLARE_')) });
+require('node:fs').writeFileSync(process.cwd() + '/args.json', record);
+require('node:fs').appendFileSync(process.cwd() + '/calls.jsonl', record + '\\n');
 if (args[0] === 'd1') { console.error('migrating'); process.exit(Number(process.env.FAKE_D1_EXIT || 0)); }
 if (process.env.FAKE_DEV_EXIT) process.exit(3);
 const port = Number(args[args.indexOf('--port') + 1]);
@@ -138,8 +140,14 @@ describe('local API runtime supervisor', () => {
     const output: string[] = [];
     await applyLocalMigrations({ ...opts, onOutput: (c) => output.push(c) }, configPath);
     expect(output.join('')).toContain('migrating');
-    const recorded = JSON.parse(await readFile(join(store.runtimeDir, 'args.json'), 'utf8'));
-    expect(recorded.args.slice(0, 5)).toEqual(['d1', 'migrations', 'apply', 'DATABASE', '--local']);
+    const calls = (await readFile(join(store.runtimeDir, 'calls.jsonl'), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).args.slice(0, 5));
+    expect(calls).toEqual([
+      ['d1', 'migrations', 'apply', 'DATABASE', '--local'],
+      ['d1', 'migrations', 'apply', 'OBSERVABILITY_DATABASE', '--local'],
+    ]);
     process.env.FAKE_D1_EXIT = '2';
     await expect(applyLocalMigrations(opts, configPath)).rejects.toThrow(/exited 2: migrating/);
     await expect(

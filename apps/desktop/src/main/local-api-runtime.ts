@@ -93,10 +93,23 @@ function run(
   });
 }
 
-/** Applies the API's D1 migrations to the local persisted database. */
+/** D1 bindings whose migration chains the local runtime applies (main and observability). */
+export const LOCAL_D1_MIGRATION_BINDINGS = ['DATABASE', 'OBSERVABILITY_DATABASE'] as const;
+
+/** Applies the API's D1 migrations to every local persisted database. */
 export async function applyLocalMigrations(
   options: Pick<LocalApiRuntimeOptions, 'apiDir' | 'store' | 'wranglerBin' | 'onOutput'>,
   configPath: string
+): Promise<void> {
+  for (const binding of LOCAL_D1_MIGRATION_BINDINGS) {
+    await applyDatabaseMigrations(options, configPath, binding);
+  }
+}
+
+async function applyDatabaseMigrations(
+  options: Pick<LocalApiRuntimeOptions, 'apiDir' | 'store' | 'wranglerBin' | 'onOutput'>,
+  configPath: string,
+  binding: string
 ): Promise<void> {
   await run(
     wranglerBin(options),
@@ -104,7 +117,7 @@ export async function applyLocalMigrations(
       'd1',
       'migrations',
       'apply',
-      'DATABASE',
+      binding,
       '--local',
       '--persist-to',
       options.store.stateDir,
