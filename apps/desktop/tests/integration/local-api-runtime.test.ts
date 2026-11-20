@@ -113,6 +113,13 @@ describe('local API runtime supervisor', () => {
     }
   });
 
+  it('returns a startup error when the runtime binary cannot be executed', async () => {
+    const opts = await options();
+    await expect(startLocalApi({ ...opts, wranglerBin: join(root, 'missing') })).rejects.toThrow(
+      /could not start/
+    );
+  });
+
   it('reports an early exit and a runtime that never becomes ready', async () => {
     process.env.FAKE_DEV_EXIT = '1';
     await expect(startLocalApi(await options())).rejects.toThrow(/exited with code 3/);

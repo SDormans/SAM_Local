@@ -168,7 +168,14 @@ export async function startLocalApi(options: LocalApiRuntimeOptions): Promise<Ru
   );
   child.stdout?.on('data', (chunk: Buffer) => options.onOutput?.(chunk.toString()));
   child.stderr?.on('data', (chunk: Buffer) => options.onOutput?.(chunk.toString()));
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  let spawnError: Error | undefined;
+  const exited = new Promise<void>((resolve) => {
+    child.once('exit', () => resolve());
+    child.once('error', (error) => {
+      spawnError = error;
+      resolve();
+    });
+  });
 
   const url = `http://${LOCAL_API_HOST}:${options.port}`;
   const stop = async (): Promise<void> => {
@@ -184,6 +191,7 @@ export async function startLocalApi(options: LocalApiRuntimeOptions): Promise<Ru
 
   const deadline = Date.now() + (options.readyTimeoutMs ?? LOCAL_API_DEFAULTS.readyTimeoutMs);
   while (Date.now() < deadline) {
+    if (spawnError) throw new Error(`Local API could not start: ${spawnError.message}`);
     if (child.exitCode !== null) throw new Error(`Local API exited with code ${child.exitCode}`);
     const ok = await fetch(`${url}/health`).then(
       (r) => r.ok,
