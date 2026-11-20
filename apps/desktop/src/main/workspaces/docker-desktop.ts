@@ -173,12 +173,19 @@ export class DockerDesktopDriver {
   /** Starts the node agent container; its port is published on loopback only. */
   async startNode(options: NodeContainerOptions): Promise<void> {
     await this.ensureNetwork();
-    const state = await this.nodeState();
-    if (state === 'running') return;
-    if (state === 'stopped') {
-      await this.run(['start', this.nodeName]);
-      return;
-    }
+    // Recreate every launch: the relay address and callback token in the env change each time.
+    // Agent state lives in a labeled volume, so it survives the recreation.
+    if ((await this.nodeState()) !== 'missing') await this.run(['rm', '-f', this.nodeName]);
+    const stateVolume = `${this.nodeName}-state`;
+    await this.run([
+      'volume',
+      'create',
+      '--label',
+      this.installationLabel(),
+      '--label',
+      `${LABEL_ROLE}=node`,
+      stateVolume,
+    ]);
     const args = [
       'run',
       '-d',
@@ -196,6 +203,8 @@ export class DockerDesktopDriver {
       `127.0.0.1:${options.hostPort}:${options.agentPort}`,
       '-v',
       '/var/run/docker.sock:/var/run/docker.sock',
+      '-v',
+      `${stateVolume}:/var/lib/vm-agent`,
     ];
     for (const mount of options.mounts ?? []) args.push('-v', mount);
     for (const [key, value] of Object.entries(options.env)) args.push('-e', `${key}=${value}`);

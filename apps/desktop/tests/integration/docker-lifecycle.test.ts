@@ -69,7 +69,13 @@ describe.runIf(dockerAvailable())('DockerDesktopDriver (real Docker)', () => {
       command: ['sleep', '300'],
     });
     expect(await driver.nodeState()).toBe('running');
-    await driver.startNode({ image: 'alpine:latest', hostPort: 0, agentPort: 8080, env: {} });
+    await driver.startNode({
+      image: 'alpine:latest',
+      hostPort: 0,
+      agentPort: 8080,
+      env: {},
+      command: ['sleep', '300'],
+    });
     const ports = await docker('port', driver.nodeName, '8080/tcp');
     expect(ports.split('\n').every((line) => line.startsWith('127.0.0.1:'))).toBe(true);
     expect(
@@ -81,7 +87,13 @@ describe.runIf(dockerAvailable())('DockerDesktopDriver (real Docker)', () => {
     expect(engine.memoryMb).toBeGreaterThan(0);
     await driver.stopNode();
     expect(await driver.nodeState()).toBe('stopped');
-    await driver.startNode({ image: 'alpine:latest', hostPort: 0, agentPort: 8080, env: {} });
+    await driver.startNode({
+      image: 'alpine:latest',
+      hostPort: 0,
+      agentPort: 8080,
+      env: {},
+      command: ['sleep', '300'],
+    });
     expect(await driver.nodeState()).toBe('running');
   }, 60_000);
 
