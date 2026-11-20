@@ -1,10 +1,13 @@
 import type { UserRole, UserStatus } from '@simple-agent-manager/shared';
 import type { Context, MiddlewareHandler, Next } from 'hono';
+import { getCookie } from 'hono/cookie';
 
 import { createAuth } from '../auth';
 import type { Env } from '../env';
 import { log } from '../lib/logger';
 import { expectJsonRecord } from '../lib/runtime-validation';
+import { LOCAL_SESSION_COOKIE, resolveLocalSession } from '../local/local-auth';
+import { isLocalRuntime } from '../local/runtime-mode';
 import {
   assertUserAllowedBySignupApproval,
   assertUserNotSuspended,
@@ -121,6 +124,13 @@ function buildAuthContext(session: AuthSession): AuthContext {
  */
 export function requireAuth(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c: Context<{ Bindings: Env }>, next: Next) => {
+    if (!c.get('auth') && isLocalRuntime(c.env)) {
+      // Local desktop installs honour only the server-issued local session cookie.
+      const localAuth = await resolveLocalSession(c.env, getCookie(c, LOCAL_SESSION_COOKIE));
+      if (!localAuth) throw errors.unauthorized('Authentication required');
+      assertUserNotSuspended(localAuth.user);
+      c.set('auth', localAuth);
+    }
     if (!c.get('auth')) {
       const auth = await createAuth(c.env);
       const session = await auth.api.getSession({
@@ -148,6 +158,15 @@ export function requireAuth(): MiddlewareHandler<{ Bindings: Env }> {
  */
 export function optionalAuth(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c: Context<{ Bindings: Env }>, next: Next) => {
+    if (isLocalRuntime(c.env)) {
+      const localAuth = await resolveLocalSession(c.env, getCookie(c, LOCAL_SESSION_COOKIE));
+      if (localAuth) {
+        assertUserNotSuspended(localAuth.user);
+        c.set('auth', localAuth);
+      }
+      await next();
+      return;
+    }
     try {
       const auth = await createAuth(c.env);
       const session = await auth.api.getSession({

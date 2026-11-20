@@ -44,6 +44,7 @@ import { withRequestScopedD1Bindings } from './lib/d1-session';
 import { log, serializeError } from './lib/logger';
 import { resolvePagesProxyTarget } from './lib/pages-proxy';
 import { parseWorkspaceSubdomain } from './lib/workspace-subdomain';
+import { isLocalRuntime, localRuntimeGuard, withLocalRuntimeBindings } from './local/runtime-mode';
 import { analyticsMiddleware } from './middleware/analytics';
 import { apiCors } from './middleware/api-cors';
 import { handleAppError } from './middleware/app-error-handler';
@@ -118,6 +119,7 @@ import {
 import { knowledgeRoutes } from './routes/knowledge';
 import { libraryRoutes } from './routes/library';
 import { libraryCommentRoutes } from './routes/library-comments';
+import { localAuthRoutes } from './routes/local-auth';
 import { mailboxRoutes } from './routes/mailbox';
 import { mcpRoutes } from './routes/mcp';
 import { projectMcpConnectionRoutes, userMcpConnectionRoutes } from './routes/mcp-connections';
@@ -192,6 +194,9 @@ const app = new Hono<{ Bindings: Env }>();
 // Must use app.onError() instead of middleware try/catch because Hono's
 // app.route() subrouter errors don't propagate to parent middleware.
 app.onError(handleAppError);
+
+// Local desktop runtime (spec 036) only: loopback Host check and outbound cloud guard.
+app.use('*', localRuntimeGuard());
 
 // Signed preview-host requests bypass session auth, credentialed CORS, Pages,
 // and workspace cookie handling.
@@ -779,6 +784,7 @@ app.get('/.well-known/openid-configuration', async (c) => {
 // codexRefreshRoutes uses workspace callback token auth (query param), not session auth.
 // apiTokenRoutes uses dedicated API token auth, not session auth.
 // Both must be mounted before authRoutes to avoid BetterAuth's wildcard catch-all.
+app.route('/api/local', localAuthRoutes);
 app.route('/api/auth', codexRefreshRoutes);
 app.route('/api/auth', apiTokenRoutes);
 app.route('/api/auth', deviceFlowRoutes);
@@ -956,11 +962,14 @@ app.notFound((c) => {
 // the real env and are likewise unaffected.
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) =>
-    app.fetch(request, withRequestScopedD1Bindings(env), ctx),
-  scheduled,
+    app.fetch(request, withLocalRuntimeBindings(withRequestScopedD1Bindings(env)), ctx),
+  // Local desktop installs never run cloud sweeps (spec 036).
+  scheduled: (controller: ScheduledController, env: Env, ctx: ExecutionContext) =>
+    isLocalRuntime(env) ? Promise.resolve() : scheduled(controller, env, ctx),
   // Email Routing deliveries for agent email triggers (preview). Raw bindings, like
   // `scheduled`: it is not a browser request.
   email: async (message: ForwardableEmailMessage, env: Env) => {
+    if (isLocalRuntime(env)) return;
     await handleInboundAgentEmail(message, env);
   },
 };

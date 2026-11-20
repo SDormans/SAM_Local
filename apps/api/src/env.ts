@@ -119,6 +119,13 @@ export interface Env extends WebhookTriggerEnv, TaskRecoveryEnv {
   BASE_DOMAIN: string;
   /** Pulumi-generated exact installation identity; absent disables destructive provider orphan discovery. */
   SAM_INSTALLATION_ID?: string;
+  /** Spec 036: `local` only in the desktop-generated runtime config; hosted leaves it unset. */
+  SAM_RUNTIME_MODE?: string;
+  /** Spec 036 local installation identity, generated once per local data directory. */
+  LOCAL_INSTALLATION_ID?: string;
+  /** Spec 036 per-installation secret held by the desktop supervisor to mint local sessions. */
+  LOCAL_BOOTSTRAP_SECRET?: string;
+  LOCAL_SESSION_TTL_SECONDS?: string; // Local desktop session lifetime (default: 86400)
   PREVIEW_BASE_DOMAIN?: string;
   PREVIEW_URL_TTL_SECONDS?: string;
   PREVIEW_SIGNING_KEY?: string;
