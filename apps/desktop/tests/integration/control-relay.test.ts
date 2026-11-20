@@ -25,6 +25,13 @@ describe('control relay', () => {
   afterAll(() => new Promise<void>((r) => api.close(() => r())));
 
   it('allows only node and workspace callback paths', () => {
+    expect(isRelayPathAllowed('/api/projects/p1/node-acp-heartbeat')).toBe(true);
+    expect(isRelayPathAllowed('/api/projects/p1/node-acp-heartbeat/x')).toBe(false);
+    expect(isRelayPathAllowed('/api/projects/p1/workspaces/w1/acp-interactions')).toBe(true);
+    expect(isRelayPathAllowed('/api/projects/p1/workspaces/w1/acp-interactions/i1/settle')).toBe(
+      true
+    );
+    expect(isRelayPathAllowed('/api/projects/p1/workspaces/w1/files')).toBe(false);
     expect(isRelayPathAllowed('/.well-known/jwks.json')).toBe(true);
     expect(isRelayPathAllowed('/api/nodes/N1/heartbeat')).toBe(true);
     expect(isRelayPathAllowed('/api/workspaces/W1/ready?x=1')).toBe(true);
