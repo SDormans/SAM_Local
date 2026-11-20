@@ -24,6 +24,7 @@ import { CLOSE_PROMPT, handleCloseRequest } from './lifecycle.js';
 import { resolveDataDirectory } from './local-data.js';
 import { probePrerequisites } from './prerequisites.js';
 import { isTrustedSender, selectProjectFolder } from './project-dialog.js';
+import { fetchKnownWorkspaces, reconcileWorkspaces } from './recovery.js';
 import {
   type LocalSessionCookie,
   ServiceSupervisor,
@@ -59,7 +60,18 @@ const supervisor = new ServiceSupervisor({
     process.env.SAM_LOCAL_WORKSPACES === 'off'
       ? undefined
       : async ({ apiUrl, bootstrapSecret, installationId }) => {
-          const node = new LocalNode(new DockerDesktopDriver(installationId));
+          const driver = new DockerDesktopDriver(installationId);
+          const recovery = await reconcileWorkspaces(
+            driver,
+            await fetchKnownWorkspaces(apiUrl, bootstrapSecret)
+          ).catch((error: unknown) => {
+            console.warn('[recovery] startup reconciliation skipped:', (error as Error).message);
+            return null;
+          });
+          if (recovery?.pending.length) {
+            console.warn('[recovery] cleanup pending for', JSON.stringify(recovery.pending));
+          }
+          const node = new LocalNode(driver);
           await node.start({
             apiUrl,
             bootstrapSecret,

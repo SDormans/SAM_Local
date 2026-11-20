@@ -288,6 +288,21 @@ export class DockerDesktopDriver {
     return report;
   }
 
+  /** Workspace IDs that still have containers created by this installation. */
+  async listWorkspaceIds(): Promise<string[]> {
+    const out = await this.run([
+      'ps',
+      '-a',
+      '--filter',
+      `label=${this.installationLabel()}`,
+      '--filter',
+      `label=${LABEL_WORKSPACE}`,
+      '--format',
+      `{{.Label "${LABEL_WORKSPACE}"}}`,
+    ]);
+    return [...new Set(out.split('\n').filter(Boolean))];
+  }
+
   /** Removes one workspace's containers and volumes. */
   removeWorkspace(workspaceId: string): Promise<CleanupReport> {
     return this.remove([this.installationLabel(), `${LABEL_WORKSPACE}=${workspaceId}`], false);

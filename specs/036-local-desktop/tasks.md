@@ -82,10 +82,10 @@
 
 **Independent Test**: Create projects, conversations, credentials, and a workspace; restart after an interrupted run, exercise backup/upgrade and credential removal, then choose uninstall retention/deletion and verify each data boundary.
 
-- [ ] T031 [P] [US4] Add crash-recovery tests in `apps/desktop/tests/integration/local-recovery.test.ts`; reconcile only resources carrying the current installation/workspace labels and report ambiguous cleanup as pending.
+- [x] T031 [P] [US4] Add crash-recovery tests in `apps/desktop/tests/integration/local-recovery.test.ts`; reconcile only resources carrying the current installation/workspace labels and report ambiguous cleanup as pending.
 - [ ] T032 [P] [US4] Add packaged-version upgrade tests in `apps/desktop/tests/integration/local-upgrade.test.ts`; verify projects, agent choices, and conversations remain available across an app upgrade. Storage migration rollback and disk-full preservation are covered by T007.
 - [ ] T033 [P] [US4] Add credential create/update/removal and packaged uninstall-retention tests in `apps/desktop/tests/e2e/data-retention.spec.ts`; verify protected-secret round trips, provider scoping, redaction, retained project data, and confirmed deletion as distinct outcomes.
-- [ ] T034 [US4] Implement startup reconciliation and safe upgrade backups in `apps/desktop/src/main/recovery.ts` and `apps/desktop/src/main/local-data.ts`; never report a workspace stopped/deleted until Docker confirms the effect.
+- [x] T034 [US4] Implement startup reconciliation and safe upgrade backups in `apps/desktop/src/main/recovery.ts` and `apps/desktop/src/main/local-data.ts`; never report a workspace stopped/deleted until Docker confirms the effect. (Linux: startup removes this installation's containers for workspaces the API no longer has, verifies removal, and reports the rest as pending; upgrade backups were done in T007.)
 - [ ] T035 [US4] Implement protected credential create/update/removal in `apps/desktop/src/main/credential-store.ts`, exposing only opaque references to the local API and renderer. Integrate uninstall retain/delete choices with the packaged Windows uninstaller before deletion; never delete project/conversation data without confirmation.
 
 ## Phase 7: Polish and Cross-Cutting Verification

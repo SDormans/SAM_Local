@@ -1,6 +1,8 @@
+import { drizzle } from 'drizzle-orm/d1';
 import { type Context, Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 
+import * as schema from '../db/schema';
 import type { Env } from '../env';
 import {
   createLocalSession,
@@ -72,6 +74,16 @@ localAuthRoutes.get('/health', requireAuth(), async (c) => {
 localAuthRoutes.put('/node', jsonValidator(LocalNodeRegistrationSchema), async (c) => {
   await requireBootstrap(c);
   return c.json(await ensureLocalNode(c.env, c.req.valid('json')));
+});
+
+/** Desktop startup reconciliation (spec 036 T034): which workspaces SAM still knows about. */
+localAuthRoutes.get('/workspaces', async (c) => {
+  await requireBootstrap(c);
+  const db = drizzle(c.env.DATABASE, { schema });
+  const rows = await db
+    .select({ id: schema.workspaces.id, status: schema.workspaces.status })
+    .from(schema.workspaces);
+  return c.json({ workspaces: rows });
 });
 
 export { localAuthRoutes };
