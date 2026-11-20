@@ -165,6 +165,9 @@ describe('model gateway', () => {
     expect(() => assertPrivateBindHost('::1')).not.toThrow();
     expect(() => assertPrivateBindHost('172.18.0.1', ['172.18.0.1'])).not.toThrow();
     expect(() => assertPrivateBindHost('192.168.1.20', ['172.18.0.1'])).toThrow();
+    for (const wildcard of ['0.0.0.0', '::', '0:0:0:0:0:0:0:0', '::ffff:0.0.0.0']) {
+      expect(() => assertPrivateBindHost(wildcard, [wildcard]), wildcard).toThrow(/wildcard/);
+    }
     await expect(
       startModelGateway({
         host: '0',

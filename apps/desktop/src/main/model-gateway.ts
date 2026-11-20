@@ -128,6 +128,10 @@ class GatewayError extends Error {
   }
 }
 
+function isUnspecified(host: string): boolean {
+  return host === '0.0.0.0' || /^[0:]+$/.test(host) || /^::ffff:0\.0\.0\.0$/i.test(host);
+}
+
 function isLoopback(host: string): boolean {
   return (isIP(host) === 4 && host.startsWith('127.')) || host === '::1';
 }
@@ -138,6 +142,9 @@ export function assertPrivateBindHost(
 ): void {
   if (isIP(host) === 0) {
     throw new Error(`Refusing to bind the model gateway to "${host}"; an IP literal is required`);
+  }
+  if (isUnspecified(host)) {
+    throw new Error(`Refusing to bind the model gateway to wildcard address "${host}"`);
   }
   if (isLoopback(host) || privateNetworkHosts.includes(host)) return;
   throw new Error(
