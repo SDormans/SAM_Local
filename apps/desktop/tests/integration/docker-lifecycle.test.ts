@@ -69,6 +69,7 @@ describe.runIf(dockerAvailable())('DockerDesktopDriver (real Docker)', () => {
       command: ['sleep', '300'],
     });
     expect(await driver.nodeState()).toBe('running');
+    await docker('exec', driver.nodeName, 'sh', '-c', 'echo kept > /var/lib/vm-agent/marker');
     await driver.startNode({
       image: 'alpine:latest',
       hostPort: 0,
@@ -95,6 +96,8 @@ describe.runIf(dockerAvailable())('DockerDesktopDriver (real Docker)', () => {
       command: ['sleep', '300'],
     });
     expect(await driver.nodeState()).toBe('running');
+    // The container is recreated each launch; agent state survives in the labeled volume.
+    expect(await docker('exec', driver.nodeName, 'cat', '/var/lib/vm-agent/marker')).toBe('kept');
   }, 60_000);
 
   it('removes only labeled workspace resources and reports cleanup truthfully', async () => {
