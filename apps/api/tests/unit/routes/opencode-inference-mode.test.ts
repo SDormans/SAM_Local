@@ -167,6 +167,37 @@ describe('POST /workspaces/:id/agent-key — OpenCode inference mode', () => {
     expect(body.message).toBe('Agent credential not found');
   });
 
+  const cloudKey = [{ encryptedToken: 'enc', iv: 'iv', credentialKind: 'api-key', isActive: true }];
+
+  it('cloud mode with a key returns only that key, never the gateway', async () => {
+    Object.assign(mockEnv, localEnv);
+    queueLimitResponses(running, [{ inferenceMode: 'cloud' }], cloudKey, running, running);
+    mockDecrypt.mockResolvedValueOnce('cloud-opencode-key');
+    const resp = await postAgentKey({ agentType: 'opencode' });
+    expect(resp.status).toBe(200);
+    const body = await resp.json();
+    expect(body.apiKey).toBe('cloud-opencode-key');
+    expect(body.providerMode).not.toBe('local-model-gateway');
+    expect(body.inferenceConfig).toBeUndefined();
+  });
+
+  it('routes two agents to their own destinations in one installation', async () => {
+    Object.assign(mockEnv, localEnv);
+    queueLimitResponses(running, [{ inferenceMode: 'local' }]);
+    const local = await (await postAgentKey({ agentType: 'opencode' })).json();
+    expect(local.providerMode).toBe('local-model-gateway');
+    expect(mockDecrypt).not.toHaveBeenCalled();
+
+    queueLimitResponses(running, cloudKey, running, running);
+    mockDecrypt.mockResolvedValueOnce('anthropic-key');
+    const resp = await postAgentKey({ agentType: 'claude-code' });
+    expect(resp.status).toBe(200);
+    const cloud = await resp.json();
+    expect(cloud.apiKey).toBe('anthropic-key');
+    expect(cloud.providerMode).not.toBe('local-model-gateway');
+    expect(cloud.inferenceConfig).toBeUndefined();
+  });
+
   it('ignores inference mode in hosted mode', async () => {
     queueLimitResponses(running, [], []);
     const resp = await postAgentKey({ agentType: 'opencode' });
