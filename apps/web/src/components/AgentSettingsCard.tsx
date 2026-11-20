@@ -4,6 +4,7 @@
  * `embedded` mode used by the unified AgentCard.
  */
 import type {
+  AgentInferenceMode,
   AgentInfo,
   AgentPermissionMode,
   AgentProviderMode,
@@ -24,6 +25,7 @@ import {
 import { Alert, Card } from '@simple-agent-manager/ui';
 import { useEffect, useState } from 'react';
 
+import { getDesktopBridge } from '../lib/desktop-bridge';
 import { ModelSelect } from './ModelSelect';
 
 const DEFAULT_SUCCESS_BANNER_MS = 3000;
@@ -68,12 +70,18 @@ export function AgentSettingsCard({
   const [providerMode, setProviderMode] = useState<AgentProviderMode | ''>(
     settings?.providerMode ?? ''
   );
+  const [inferenceMode, setInferenceMode] = useState<AgentInferenceMode | ''>(
+    settings?.inferenceMode ?? ''
+  );
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const isOpenCode = agent.id === 'opencode';
+  // Spec 036: only the desktop app can send OpenCode's requests to a model on this computer.
+  const showInferenceMode = isOpenCode && getDesktopBridge() !== null;
+  const usesLocalModel = showInferenceMode && inferenceMode === 'local';
   const supportsSamProvider = agent.id === 'claude-code' || agent.id === 'openai-codex';
   const supportsOAuthProvider = agent.id === 'claude-code';
   const selectedProvider = opencodeProvider;
@@ -97,6 +105,7 @@ export function AgentSettingsCard({
     setOpencodeProvider(settings?.opencodeProvider ?? DEFAULT_OPENCODE_PROVIDER);
     setOpencodeBaseUrl(settings?.opencodeBaseUrl ?? '');
     setProviderMode(settings?.providerMode ?? '');
+    setInferenceMode(settings?.inferenceMode ?? '');
   }, [settings]);
 
   const handleSave = async () => {
@@ -113,6 +122,10 @@ export function AgentSettingsCard({
       if (isOpenCode) {
         data.opencodeProvider = opencodeProvider;
         data.opencodeBaseUrl = opencodeBaseUrl.trim() || null;
+      }
+
+      if (showInferenceMode) {
+        data.inferenceMode = inferenceMode || null;
       }
 
       if (supportsSamProvider) {
@@ -175,6 +188,9 @@ export function AgentSettingsCard({
         return true;
       if ((opencodeBaseUrl.trim() || null) !== (settings?.opencodeBaseUrl ?? null)) return true;
     }
+    if (showInferenceMode && (inferenceMode || null) !== (settings?.inferenceMode ?? null)) {
+      return true;
+    }
     if (supportsSamProvider) {
       if ((providerMode || null) !== (settings?.providerMode ?? null)) return true;
     }
@@ -197,8 +213,48 @@ export function AgentSettingsCard({
         </div>
       )}
 
+      {showInferenceMode && (
+        <fieldset className="mb-4 border-0 p-0 m-0" data-testid="inference-mode">
+          <legend className="text-sm font-medium text-fg-primary mb-1">Where requests go</legend>
+          <div className="text-xs text-fg-muted mb-2">
+            SAM never switches between these on its own. If the chosen one is unavailable, the agent
+            stops with an error.
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {(
+              [
+                ['local', 'Model on this computer'],
+                ['cloud', 'Cloud provider'],
+              ] as const
+            ).map(([mode, label]) => (
+              <label
+                key={mode}
+                className="flex items-center gap-2 min-h-11 px-3 rounded-sm border border-border-default bg-inset text-sm text-fg-primary cursor-pointer"
+              >
+                <input
+                  type="radio"
+                  name={`inference-mode-${agent.id}`}
+                  value={mode}
+                  checked={inferenceMode === mode}
+                  onChange={() => setInferenceMode(mode)}
+                  data-testid={`inference-mode-${mode}`}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-fg-muted mt-2 mb-0" data-testid="inference-mode-summary">
+            {inferenceMode === 'local'
+              ? 'OpenCode uses the local model service set up in SAM. Nothing is sent to a cloud provider.'
+              : inferenceMode === 'cloud'
+                ? `OpenCode sends requests to ${OPENCODE_PROVIDERS[opencodeProvider].label}.`
+                : 'Not chosen yet. Pick one so OpenCode knows where to send requests.'}
+          </p>
+        </fieldset>
+      )}
+
       {/* OpenCode provider selection */}
-      {isOpenCode && (
+      {isOpenCode && !usesLocalModel && (
         <div className="mb-4">
           <label
             htmlFor={`opencode-provider-${agent.id}`}

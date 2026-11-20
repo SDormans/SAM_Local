@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 
 import * as schema from '../db/schema';
 import type { Env } from '../env';
-import { buildLocalOpencodeInferenceConfig } from '../local/local-inference';
+import { resolveLocalOpencodeInferenceConfig } from '../local/local-inference';
 import { getUserId, requireApproved, requireAuth } from '../middleware/auth';
 
 const agentsCatalogRoutes = new Hono<{ Bindings: Env }>();
@@ -42,6 +42,7 @@ agentsCatalogRoutes.get('/', async (c) => {
       .select({
         agentType: schema.agentSettings.agentType,
         providerMode: schema.agentSettings.providerMode,
+        inferenceMode: schema.agentSettings.inferenceMode,
       })
       .from(schema.agentSettings)
       .where(eq(schema.agentSettings.userId, userId)),
@@ -56,6 +57,9 @@ agentsCatalogRoutes.get('/', async (c) => {
 
   const aiProxyEnabled = (c.env.AI_PROXY_ENABLED ?? 'true') !== 'false';
 
+  // Spec 036: the desktop's OpenCode runs on the local model gateway, which needs no key.
+  const localModelReady = (await resolveLocalOpencodeInferenceConfig(c.env)) !== null;
+
   const agents: AgentInfo[] = AGENT_CATALOG.map((agent) => {
     const hasDedicatedKey = configuredAgents.has(agent.id);
     // Claude Code / Codex: mark as configured if providerMode='sam' and proxy is enabled.
@@ -64,9 +68,10 @@ agentsCatalogRoutes.get('/', async (c) => {
       aiProxyEnabled &&
       (agent.id === 'claude-code' || agent.id === 'openai-codex') &&
       providerModeMap.get(agent.id) === 'sam';
-    // Spec 036: the desktop's OpenCode runs on the local model gateway, which needs no key.
     const usesLocalModel =
-      agent.id === 'opencode' && buildLocalOpencodeInferenceConfig(c.env) !== null;
+      agent.id === 'opencode' &&
+      localModelReady &&
+      agentProviderSettings.find((s) => s.agentType === agent.id)?.inferenceMode !== 'cloud';
     return {
       id: agent.id,
       name: agent.name,

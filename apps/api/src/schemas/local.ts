@@ -19,3 +19,24 @@ export const LocalNodeRegistrationSchema = v.object({
 });
 
 export type LocalNodeRegistration = v.InferOutput<typeof LocalNodeRegistrationSchema>;
+
+/** Spec 036 LocalModelConnectionInput: non-secret settings only. */
+export const LocalModelConnectionInputSchema = v.object({
+  providerType: v.picklist(['ollama', 'openai-compatible']),
+  baseUrl: v.pipe(v.string(), v.maxLength(2048)),
+  modelId: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+  credentialRef: v.optional(v.pipe(v.string(), v.maxLength(256))),
+});
+
+export type LocalModelConnectionInput = v.InferOutput<typeof LocalModelConnectionInputSchema>;
+
+export const LocalModelVerifyRequestSchema = v.object({
+  connectionId: v.pipe(v.string(), v.minLength(1), v.maxLength(64)),
+});
+
+/** What the local API saves for the local model connection (non-secret). */
+export const StoredLocalModelConnectionSchema = v.object({
+  ...LocalModelConnectionInputSchema.entries,
+  connectionId: v.string(),
+  lastVerifiedAt: v.optional(v.string()),
+});

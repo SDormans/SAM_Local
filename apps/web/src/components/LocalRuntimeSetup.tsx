@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import { useQueryScope } from '../hooks/useQueryScope';
 import { request } from '../lib/api/client';
 import type { SamDesktopBridge } from '../lib/desktop-bridge';
+import { LocalModelConnection } from './LocalModelConnection';
 
 export interface LocalRuntimeHealth {
   status: 'ready' | 'degraded' | 'unavailable';
@@ -94,6 +95,7 @@ export function LocalRuntimeSetup({ bridge }: { bridge: SamDesktopBridge }) {
             )}
           </>
         )}
+        <LocalModelConnection />
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button
             type="button"

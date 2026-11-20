@@ -1,4 +1,5 @@
 import type { Env } from '../env';
+import { readLocalModelConnection } from './local-models';
 
 /** Path the desktop model gateway serves (apps/desktop/src/main/model-gateway.ts). */
 export const LOCAL_MODEL_GATEWAY_PATH = '/local-model/v1';
@@ -9,14 +10,17 @@ export const LOCAL_MODEL_GATEWAY_PATH = '/local-model/v1';
  * with its own callback token, and the node agent fills in the relay address it already uses.
  * Returns null outside the local runtime or when no local model is configured.
  */
-export function buildLocalOpencodeInferenceConfig(env: Env): {
+export function buildLocalOpencodeInferenceConfig(
+  env: Env,
+  savedModelId?: string
+): {
   provider: 'openai-compatible';
   baseURL: string;
   model: string;
   apiKeySource: 'callback-token';
 } | null {
   if (env.SAM_RUNTIME_MODE !== 'local') return null;
-  const model = env.LOCAL_DEFAULT_MODEL?.trim();
+  const model = (savedModelId ?? env.LOCAL_DEFAULT_MODEL)?.trim();
   if (!model) return null;
   return {
     provider: 'openai-compatible',
@@ -24,4 +28,13 @@ export function buildLocalOpencodeInferenceConfig(env: Env): {
     model,
     apiKeySource: 'callback-token',
   };
+}
+
+/** Like buildLocalOpencodeInferenceConfig, using the model saved in SAM settings when there is one. */
+export async function resolveLocalOpencodeInferenceConfig(
+  env: Env
+): Promise<ReturnType<typeof buildLocalOpencodeInferenceConfig>> {
+  if (env.SAM_RUNTIME_MODE !== 'local') return null;
+  const saved = await readLocalModelConnection(env);
+  return buildLocalOpencodeInferenceConfig(env, saved?.modelId);
 }

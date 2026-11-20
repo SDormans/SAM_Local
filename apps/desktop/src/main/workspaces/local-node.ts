@@ -82,13 +82,16 @@ export class LocalNode {
     const apiPort = Number(new URL(options.apiUrl).port);
     await this.relay?.close();
     await this.gateway?.close();
-    const modelServiceUrl = options.modelServiceUrl ?? DEFAULT_MODEL_SERVICE_URL;
+    let modelServiceUrl = options.modelServiceUrl ?? DEFAULT_MODEL_SERVICE_URL;
     // Loopback only: workspaces reach it through the relay, which forwards just the model paths.
     this.gateway = await (options.startGateway ?? startModelGateway)({
       host: '127.0.0.1',
       authorize: createWorkspaceTokenAuthorizer({
         apiUrl: options.apiUrl,
         fetchImpl: options.fetchImpl,
+        onLocalModel: (baseUrl) => {
+          modelServiceUrl = baseUrl;
+        },
       }),
       resolveUpstream: async (connectionId) =>
         connectionId === LOCAL_MODEL_CONNECTION_ID

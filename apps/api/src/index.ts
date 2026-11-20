@@ -3,6 +3,7 @@ export { WorkspaceBootLog } from './durable-objects/workspace-boot-log';
 import { adminAgentEmailRoutes } from './routes/admin-agent-email';
 import { cliOperationReceiptRoutes } from './routes/cli-operation-receipts';
 import { cliProjectMetadataRoutes } from './routes/cli-project-metadata';
+import { localModelsRoutes } from './routes/local-models';
 import { projectScheduleRoutes } from './routes/project-schedules';
 import { projectStandingWatchRoutes } from './routes/project-standing-watches';
 // Re-export Durable Object classes for Cloudflare Workers runtime
@@ -784,6 +785,7 @@ app.get('/.well-known/openid-configuration', async (c) => {
 // codexRefreshRoutes uses workspace callback token auth (query param), not session auth.
 // apiTokenRoutes uses dedicated API token auth, not session auth.
 // Both must be mounted before authRoutes to avoid BetterAuth's wildcard catch-all.
+app.route('/api/local/models', localModelsRoutes);
 app.route('/api/local', localAuthRoutes);
 app.route('/api/auth', codexRefreshRoutes);
 app.route('/api/auth', apiTokenRoutes);
