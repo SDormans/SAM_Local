@@ -53,6 +53,7 @@ const supervisor = new ServiceSupervisor({
   port,
   nodeAgentPort,
   localDefaultModel: process.env.SAM_LOCAL_DEFAULT_MODEL,
+  onOutput: (chunk: string) => process.stdout.write(chunk),
   probePrerequisites: () => probePrerequisites(),
   startWorkspaceRuntime:
     process.env.SAM_LOCAL_WORKSPACES === 'off'

@@ -18,6 +18,7 @@ export const RELAY_ALLOWED_PATHS: readonly RegExp[] = [
   /^\/api\/workspaces\/[^/]+\/[a-z0-9/-]+$/i,
   /^\/api\/projects\/[^/]+\/(tasks|acp-sessions|sessions)\/[a-z0-9/-]+$/i,
   /^\/api\/projects\/[^/]+\/node-acp-heartbeat$/,
+  /^\/api\/projects\/[^/]+\/workspace-resource-history$/,
   /^\/api\/projects\/[^/]+\/workspaces\/[^/]+\/acp-interactions(\/[a-z0-9-]+\/(settle|complete-url))?$/i,
 ];
 

@@ -19,7 +19,8 @@ function envWithoutCloudflare(extra: Record<string, string>): Record<string, str
 }
 
 export async function launchDesktop(
-  dataDir: string
+  dataDir: string,
+  extraEnv: Record<string, string> = {}
 ): Promise<{ app: ElectronApplication; window: Page }> {
   const app = await electron.launch({
     args: [desktopDir],
@@ -27,6 +28,7 @@ export async function launchDesktop(
       SAM_LOCAL_DATA_DIR: dataDir,
       SAM_LOCAL_API_PORT: String(PORT),
       SAM_LOCAL_WORKSPACES: 'off',
+      ...extraEnv,
     }),
     timeout: 120_000,
   });

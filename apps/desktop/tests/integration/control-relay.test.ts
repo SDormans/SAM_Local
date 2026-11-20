@@ -26,6 +26,7 @@ describe('control relay', () => {
 
   it('allows only node and workspace callback paths', () => {
     expect(isRelayPathAllowed('/api/projects/p1/node-acp-heartbeat')).toBe(true);
+    expect(isRelayPathAllowed('/api/projects/p1/workspace-resource-history')).toBe(true);
     expect(isRelayPathAllowed('/api/projects/p1/node-acp-heartbeat/x')).toBe(false);
     expect(isRelayPathAllowed('/api/projects/p1/workspaces/w1/acp-interactions')).toBe(true);
     expect(isRelayPathAllowed('/api/projects/p1/workspaces/w1/acp-interactions/i1/settle')).toBe(

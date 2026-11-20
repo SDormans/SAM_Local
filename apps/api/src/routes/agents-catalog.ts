@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 
 import * as schema from '../db/schema';
 import type { Env } from '../env';
+import { buildLocalOpencodeInferenceConfig } from '../local/local-inference';
 import { getUserId, requireApproved, requireAuth } from '../middleware/auth';
 
 const agentsCatalogRoutes = new Hono<{ Bindings: Env }>();
@@ -63,12 +64,15 @@ agentsCatalogRoutes.get('/', async (c) => {
       aiProxyEnabled &&
       (agent.id === 'claude-code' || agent.id === 'openai-codex') &&
       providerModeMap.get(agent.id) === 'sam';
+    // Spec 036: the desktop's OpenCode runs on the local model gateway, which needs no key.
+    const usesLocalModel =
+      agent.id === 'opencode' && buildLocalOpencodeInferenceConfig(c.env) !== null;
     return {
       id: agent.id,
       name: agent.name,
       description: agent.description,
       supportsAcp: agent.supportsAcp,
-      configured: hasDedicatedKey || usesSamProvider,
+      configured: hasDedicatedKey || usesSamProvider || usesLocalModel,
       credentialHelpUrl: agent.credentialHelpUrl,
       fallbackCredentialSource: resolveFallbackCredentialSource(usesSamProvider),
     };
