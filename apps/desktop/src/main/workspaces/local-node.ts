@@ -102,6 +102,7 @@ export class LocalNode {
         VM_AGENT_PORT: String(NODE_AGENT_CONTAINER_PORT),
         // The relay is plain http on a private network; the agent only allows that when opted in.
         SAM_LOCAL_DESKTOP: 'true',
+        SAM_CONTAINER_LABELS: `sam.installation=${this.driver.installationId}`,
         JWT_ISSUER: `https://api.${LOCAL_BASE_DOMAIN}`,
       },
     });

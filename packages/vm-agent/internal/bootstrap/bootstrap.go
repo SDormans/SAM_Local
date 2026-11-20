@@ -1245,6 +1245,17 @@ func fallbackToDefaultDevcontainer(
 func devcontainerUpArgs(cfg *config.Config, overrideConfigPath, devcontainerConfigName string) []string {
 	args := []string{"up", "--workspace-folder", cfg.WorkspaceDir}
 
+	if len(cfg.ExtraContainerLabels) > 0 {
+		// --id-label replaces the CLI's default identity labels, so keep the lookup label too.
+		args = append(args, "--id-label", cfg.ContainerLabelKey+"="+cfg.ContainerLabelValue)
+		for _, label := range cfg.ExtraContainerLabels {
+			args = append(args, "--id-label", label)
+		}
+		if cfg.WorkspaceID != "" {
+			args = append(args, "--id-label", "sam.workspace="+cfg.WorkspaceID)
+		}
+	}
+
 	if devcontainerConfigName != "" {
 		args = append(args, "--config", namedDevcontainerConfigPath(cfg.WorkspaceDir, devcontainerConfigName))
 	}

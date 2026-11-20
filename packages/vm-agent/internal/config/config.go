@@ -470,7 +470,10 @@ type Config struct {
 	PortScanExclude  string        // Comma-separated ports to exclude (env: PORT_SCAN_EXCLUDE, default: "22,2375,2376,8443")
 	// LocalProjectsRoot is the Docker-visible folder under which spec 036 local-desktop
 	// projects may be bind-mounted (env: LOCAL_PROJECTS_ROOT). Empty disables local workspaces.
-	LocalProjectsRoot    string
+	LocalProjectsRoot string
+	// ExtraContainerLabels (env: SAM_CONTAINER_LABELS, comma-separated k=v) are added to workspace
+	// containers so the spec 036 desktop app can find and clean up everything it created.
+	ExtraContainerLabels []string
 	PortScanEphemeralMin int           // Min ephemeral port to exclude (env: PORT_SCAN_EPHEMERAL_MIN, default: 32768)
 	PortProxyCacheTTL    time.Duration // Bridge IP cache TTL (env: PORT_PROXY_CACHE_TTL, default: 30s)
 

@@ -3842,3 +3842,22 @@ func TestGeneratedDevcontainerHelperSlowCredentials(t *testing.T) {
 		t.Fatalf("helper output=%s err=%v", output, err)
 	}
 }
+
+func TestDevcontainerUpArgsAddsInstallationLabels(t *testing.T) {
+	cfg := &config.Config{
+		WorkspaceDir:         "/home/me/demo",
+		WorkspaceID:          "ws1",
+		ContainerLabelKey:    "devcontainer.local_folder",
+		ContainerLabelValue:  "/home/me/demo",
+		ExtraContainerLabels: []string{"sam.installation=abc"},
+	}
+	got := strings.Join(devcontainerUpArgs(cfg, "", ""), " ")
+	want := "up --workspace-folder /home/me/demo --id-label devcontainer.local_folder=/home/me/demo --id-label sam.installation=abc --id-label sam.workspace=ws1"
+	if got != want {
+		t.Fatalf("devcontainerUpArgs = %q, want %q", got, want)
+	}
+	cfg.ExtraContainerLabels = nil
+	if got := strings.Join(devcontainerUpArgs(cfg, "", ""), " "); strings.Contains(got, "--id-label") {
+		t.Fatalf("hosted nodes must keep default identity labels, got %q", got)
+	}
+}

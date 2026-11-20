@@ -62,6 +62,18 @@ describe.runIf(imageAvailable())('local node agent', () => {
   afterAll(async () => {
     const report = await node?.removeAll();
     expect(report?.complete).toBe(true);
+    // Workspace containers created by the devcontainer CLI must carry the installation label.
+    const stray = execFileSync('docker', [
+      'ps',
+      '-a',
+      '--filter',
+      `label=devcontainer.local_folder=${join(root, 'demo')}`,
+      '--format',
+      '{{.ID}}',
+    ])
+      .toString()
+      .trim();
+    expect(stray).toBe('');
     await api?.stop();
     await rm(root, { recursive: true, force: true });
   });
