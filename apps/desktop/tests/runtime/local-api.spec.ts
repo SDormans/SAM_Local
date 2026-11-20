@@ -248,6 +248,13 @@ describe('local API runtime', () => {
     ).toBe(400);
     const list = await (await fetch(`${base}/api/projects`, { headers: { cookie } })).json();
     expect(JSON.stringify(list)).toContain(project.id);
+    const renamed = await fetch(`${base}/api/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Demo renamed' }),
+    });
+    expect(renamed.status).toBe(200);
+    expect(await renamed.json()).toMatchObject({ name: 'Demo renamed', repoProvider: 'local' });
   });
 
   it('keeps the principal and session across a full runtime restart', async () => {
