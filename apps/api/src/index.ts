@@ -202,7 +202,14 @@ app.use('*', localRuntimeGuard());
 // Spec 036 T035: after a credential change, drop desktop-stored secrets nothing references.
 app.use('*', async (c, next) => {
   await next();
-  if (!isLocalRuntime(c.env) || c.req.method === 'GET' || !/credential/.test(c.req.path)) return;
+  if (
+    !isLocalRuntime(c.env) ||
+    c.req.method === 'GET' ||
+    c.res.status >= 400 ||
+    !/credential/.test(c.req.path)
+  ) {
+    return;
+  }
   await sweepLocalSecrets(c.env).catch((error: unknown) =>
     log.warn('local_secret_sweep_failed', { error: (error as Error).message })
   );

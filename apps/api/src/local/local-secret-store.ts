@@ -36,6 +36,9 @@ export async function sealCredential(
   return { ciphertext: `${LOCAL_SECRET_REF_PREFIX}${ref}`, iv: LOCAL_SECRET_REF_IV };
 }
 
+/** Entries younger than this may belong to a save whose row is not written yet. */
+const SWEEP_MIN_AGE_MS = 10 * 60 * 1000;
+
 /** Deletes desktop-stored secrets that no credential row references any more. */
 export async function sweepLocalSecrets(env: Env): Promise<number> {
   const broker = registerLocalSecretBroker(env);
@@ -49,7 +52,10 @@ export async function sweepLocalSecrets(env: Env): Promise<number> {
       .all<{ token: string }>();
     for (const row of results) referenced.add(row.token.slice(LOCAL_SECRET_REF_PREFIX.length));
   }
-  const { refs } = await brokerRequest<{ refs: string[] }>(broker, '/secrets');
+  const { refs } = await brokerRequest<{ refs: string[] }>(
+    broker,
+    `/secrets?minAgeMs=${SWEEP_MIN_AGE_MS}`
+  );
   let removed = 0;
   for (const ref of refs) {
     if (referenced.has(ref)) continue;
