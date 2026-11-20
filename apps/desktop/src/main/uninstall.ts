@@ -43,6 +43,7 @@ export async function performUninstall(options: {
     await rm(join(options.dataDir, entry), { recursive: true, force: true });
   }
   const left = await readdir(options.dataDir).catch(() => null);
-  if (left && left.length === 0) await rmdir(options.dataDir);
+  // Best effort: a symlinked or otherwise non-removable data directory stays in place.
+  if (left && left.length === 0) await rmdir(options.dataDir).catch(() => undefined);
   return { choice: 'delete', containers, dataDeleted: true };
 }
