@@ -4,7 +4,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -42,6 +42,8 @@ let root: string;
 let secrets: LocalRuntimeSecrets;
 let api: RunningLocalApi | undefined;
 let node: LocalNode | undefined;
+let nodeId = '';
+let sessionCookie = '';
 
 describe.runIf(imageAvailable())('local node agent', () => {
   beforeAll(async () => {
@@ -92,5 +94,38 @@ describe.runIf(imageAvailable())('local node agent', () => {
     expect(health.status).toBe(200);
     const ports = execFileSync('docker', ['port', node!.driver.nodeName]).toString().trim();
     expect(ports.split('\n').every((line) => line.includes('127.0.0.1:'))).toBe(true);
+    nodeId = started.nodeId;
+    sessionCookie = cookie;
+  });
+
+  it('creates a workspace for a local folder on the local node', async () => {
+    const folder = join(root, 'demo');
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, 'README.md'), '# demo\n');
+    const headers = { cookie: sessionCookie, 'content-type': 'application/json' };
+    const project = await fetch(`${api!.url}/api/projects`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'demo', repoProvider: 'local', localPath: folder }),
+    });
+    expect(project.status).toBe(201);
+    const { id: projectId } = await project.json();
+    const created = await fetch(`${api!.url}/api/workspaces`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'demo-ws', projectId, nodeId }),
+    });
+    const createdBody = await created.text();
+    expect(created.status, createdBody).toBeLessThan(300);
+    const workspaceId = JSON.parse(createdBody).id as string;
+
+    let ws: { status?: string; errorMessage?: string | null } = {};
+    for (let i = 0; i < 150; i++) {
+      const res = await fetch(`${api!.url}/api/workspaces/${workspaceId}`, { headers });
+      if (res.ok) ws = await res.json();
+      if (ws.status === 'running' || ws.status === 'error') break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    expect(ws, JSON.stringify(ws)).toMatchObject({ status: 'running' });
   });
 });

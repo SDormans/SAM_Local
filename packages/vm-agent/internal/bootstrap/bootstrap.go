@@ -784,7 +784,7 @@ func ensureRepositoryReady(ctx context.Context, cfg *config.Config, state *boots
 		slog.Info("Repository is empty, skipping clone step")
 		return nil
 	}
-	if strings.EqualFold(strings.TrimSpace(cfg.RepoProvider), "local") {
+	if isLocalRepoProvider(cfg.RepoProvider) {
 		// Spec 036: local-desktop folders are bind-mounted in place, never cloned.
 		slog.Info("Local folder repository, skipping clone step", "repository", cfg.Repository)
 		return nil
@@ -1756,7 +1756,7 @@ func writeMountOverrideConfig(ctx context.Context, cfg *config.Config, volumeNam
 	}
 
 	normalizeMergedLifecycleCommands(readResult.MergedConfiguration)
-	if strings.EqualFold(strings.TrimSpace(cfg.RepoProvider), "local") {
+	if isLocalRepoProvider(cfg.RepoProvider) {
 		readResult.MergedConfiguration["workspaceMount"] = fmt.Sprintf("source=%s,target=/workspaces/%s,type=bind", cfg.Repository, filepath.Base(cfg.Repository))
 	} else {
 		readResult.MergedConfiguration["workspaceMount"] = fmt.Sprintf("source=%s,target=/workspaces,type=volume", volumeName)
@@ -1929,7 +1929,10 @@ func writeDefaultDevcontainerConfigForMode(cfg *config.Config, volumeName, credH
 	// adds supplementary mounts; workspaceMount in the config is the correct way
 	// to override the default workspace mount.
 	mountLines := ""
-	if volumeName != "" {
+	if isLocalRepoProvider(cfg.RepoProvider) {
+		// Spec 036: bind the user's folder in place instead of the workspace volume.
+		mountLines = fmt.Sprintf(",\n  \"workspaceMount\": \"source=%s,target=/workspaces/%s,type=bind\",\n  \"workspaceFolder\": \"/workspaces/%s\"", cfg.Repository, filepath.Base(cfg.Repository), filepath.Base(cfg.Repository))
+	} else if volumeName != "" {
 		repoDirName := config.DeriveRepoDirName(cfg.Repository)
 		if repoDirName == "" {
 			repoDirName = filepath.Base(cfg.WorkspaceDir)
@@ -2397,6 +2400,11 @@ func writeCredentialHelperToHost(cfg *config.Config) (string, error) {
 	}
 	if cfg.Port <= 0 {
 		return "", fmt.Errorf("invalid VM agent port: %d", cfg.Port)
+	}
+
+	if isLocalRepoProvider(cfg.RepoProvider) {
+		// Spec 036: local folders keep the user's own Git setup; SAM injects no Git credentials.
+		return "", nil
 	}
 
 	script, err := renderGitCredentialHelperScript(cfg)
@@ -3312,4 +3320,9 @@ func saveState(path string, state *bootstrapState) error {
 	}
 
 	return os.WriteFile(path, encoded, 0o600)
+}
+
+// isLocalRepoProvider reports spec 036 local-desktop folders, which are used in place.
+func isLocalRepoProvider(provider string) bool {
+	return strings.EqualFold(strings.TrimSpace(provider), "local")
 }

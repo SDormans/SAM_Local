@@ -76,6 +76,9 @@ describe.runIf(dockerAvailable())('DockerDesktopDriver (real Docker)', () => {
       await docker('inspect', driver.nodeName, '--format', '{{json .Config.Labels}}')
     ).toContain(`"${LABEL_INSTALLATION}":"${id}"`);
     expect(await driver.networkGateway()).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+    const engine = await driver.engineResources();
+    expect(engine.vcpuCount).toBeGreaterThan(0);
+    expect(engine.memoryMb).toBeGreaterThan(0);
     await driver.stopNode();
     expect(await driver.nodeState()).toBe('stopped');
     await driver.startNode({ image: 'alpine:latest', hostPort: 0, agentPort: 8080, env: {} });

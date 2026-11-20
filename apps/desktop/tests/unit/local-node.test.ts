@@ -27,6 +27,7 @@ describe('LocalNode', () => {
     const driver = {
       ensureNetwork: vi.fn(async () => undefined),
       networkGateway: vi.fn(async () => '172.20.0.1'),
+      engineResources: vi.fn(async () => ({ vcpuCount: 8, memoryMb: 16000 })),
       startNode: vi.fn(async () => undefined),
       stopNode: vi.fn(async () => undefined),
       removeAll: vi.fn(async () => ({ removed: [], failed: [], complete: true })),
@@ -45,6 +46,7 @@ describe('LocalNode', () => {
         platform: 'linux' as const,
         fetchImpl: vi.fn(async () => response) as unknown as typeof fetch,
         startRelay: vi.fn(async () => relay),
+        statDisk: vi.fn(async () => ({ bavail: 50 * 1024 ** 2, bsize: 4096 })),
       },
     };
   }
@@ -64,7 +66,8 @@ describe('LocalNode', () => {
     });
     expect(options.fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:8790/api/local/node', {
       method: 'PUT',
-      headers: { authorization: 'Bearer s3cret' },
+      headers: { authorization: 'Bearer s3cret', 'content-type': 'application/json' },
+      body: JSON.stringify({ vcpuCount: 8, memoryMb: 16000, diskGb: 200 }),
     });
     expect(driver.startNode).toHaveBeenCalledWith(
       expect.objectContaining({

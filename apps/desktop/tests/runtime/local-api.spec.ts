@@ -228,7 +228,11 @@ describe('local API runtime', () => {
     const put = (authorization?: string) =>
       fetch(`${base}/api/local/node`, {
         method: 'PUT',
-        headers: authorization ? { authorization } : {},
+        headers: {
+          'content-type': 'application/json',
+          ...(authorization ? { authorization } : {}),
+        },
+        body: JSON.stringify({ vcpuCount: 4, memoryMb: 8192, diskGb: 100 }),
       });
     expect((await put()).status).toBe(401);
     const first = await (await put(`Bearer ${secrets.LOCAL_BOOTSTRAP_SECRET}`)).json();

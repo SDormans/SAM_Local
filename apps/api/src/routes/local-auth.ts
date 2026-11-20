@@ -18,7 +18,7 @@ import { isLocalRuntime } from '../local/runtime-mode';
 import { requireAuth } from '../middleware/auth';
 import { errors } from '../middleware/error';
 import { jsonValidator } from '../schemas';
-import { LocalPrerequisitesSchema } from '../schemas/local';
+import { LocalNodeRegistrationSchema, LocalPrerequisitesSchema } from '../schemas/local';
 
 /** Local desktop session routes (spec 036). Not mounted behaviour for hosted deployments. */
 const localAuthRoutes = new Hono<{ Bindings: Env }>();
@@ -69,9 +69,9 @@ localAuthRoutes.get('/health', requireAuth(), async (c) => {
 });
 
 /** Desktop supervisor registers the local node agent before launching its container. */
-localAuthRoutes.put('/node', async (c) => {
+localAuthRoutes.put('/node', jsonValidator(LocalNodeRegistrationSchema), async (c) => {
   await requireBootstrap(c);
-  return c.json(await ensureLocalNode(c.env));
+  return c.json(await ensureLocalNode(c.env, c.req.valid('json')));
 });
 
 export { localAuthRoutes };

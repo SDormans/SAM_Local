@@ -6,6 +6,8 @@
  * 3. Register the node with the local API (bootstrap secret) to get its callback token.
  * 4. Run the node agent container with its port published on loopback only.
  */
+import { statfs } from 'node:fs/promises';
+
 import { type RunningControlRelay, startControlRelay } from '../control-relay.js';
 import { LOCAL_BASE_DOMAIN } from '../local-runtime-config.js';
 import { type CleanupReport, type DockerDesktopDriver } from './docker-desktop.js';
@@ -24,6 +26,7 @@ export interface LocalNodeOptions {
   platform?: NodeJS.Platform;
   fetchImpl?: typeof fetch;
   startRelay?: typeof startControlRelay;
+  statDisk?: (path: string) => Promise<{ bavail: number; bsize: number }>;
 }
 
 /**
@@ -64,9 +67,16 @@ export class LocalNode {
     });
     const relayPort = new URL(this.relay.url).port;
 
+    const engine = await this.driver.engineResources();
+    const disk = await (options.statDisk ?? statfs)(options.projectsRoot);
+    const diskGb = Math.max(1, Math.floor((disk.bavail * disk.bsize) / 1024 ** 3));
     const response = await (options.fetchImpl ?? fetch)(`${options.apiUrl}/api/local/node`, {
       method: 'PUT',
-      headers: { authorization: `Bearer ${options.bootstrapSecret}` },
+      headers: {
+        authorization: `Bearer ${options.bootstrapSecret}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ ...engine, diskGb }),
     });
     if (!response.ok) {
       throw new Error(

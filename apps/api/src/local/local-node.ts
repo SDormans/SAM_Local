@@ -11,6 +11,7 @@ import { drizzle } from 'drizzle-orm/d1';
 
 import * as schema from '../db/schema';
 import type { Env } from '../env';
+import type { LocalNodeRegistration as LocalNodeHardware } from '../schemas/local';
 import { signNodeCallbackToken } from '../services/jwt';
 import { createNodeRecord } from '../services/nodes';
 import { ensureLocalPrincipal } from './local-auth';
@@ -24,7 +25,10 @@ export interface LocalNodeRegistration {
   callbackToken: string;
 }
 
-export async function ensureLocalNode(env: Env): Promise<LocalNodeRegistration> {
+export async function ensureLocalNode(
+  env: Env,
+  hardware: LocalNodeHardware
+): Promise<LocalNodeRegistration> {
   const userId = await ensureLocalPrincipal(env);
   const db = drizzle(env.DATABASE, { schema });
   const existing = await db
@@ -50,14 +54,20 @@ export async function ensureLocalNode(env: Env): Promise<LocalNodeRegistration> 
       cloudProvider: 'local',
     });
     nodeId = node.id;
-    await db
-      .update(schema.nodes)
-      .set({
-        nodeClass: 'user-owned',
-        transport: LOCAL_NODE_TRANSPORT,
-        runtimeTerminationConfirmedAt: null,
-      })
-      .where(eq(schema.nodes.id, nodeId));
   }
+  // Docker Desktop's resource limits can change between launches, so refresh them each time.
+  await db
+    .update(schema.nodes)
+    .set({
+      nodeClass: 'user-owned',
+      transport: LOCAL_NODE_TRANSPORT,
+      runtimeTerminationConfirmedAt: null,
+      observedHardwareSource: 'observed',
+      observedProviderInstanceVcpuCount: hardware.vcpuCount,
+      observedProviderInstanceMemoryMb: hardware.memoryMb,
+      observedProviderInstanceDiskGb: hardware.diskGb,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.nodes.id, nodeId));
   return { nodeId, callbackToken: await signNodeCallbackToken(nodeId, env) };
 }

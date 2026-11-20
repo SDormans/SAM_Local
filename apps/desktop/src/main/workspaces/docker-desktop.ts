@@ -142,6 +142,18 @@ export class DockerDesktopDriver {
     return gateway;
   }
 
+  /** CPU and memory Docker Desktop's Linux VM gives containers. */
+  async engineResources(): Promise<{ vcpuCount: number; memoryMb: number }> {
+    const [cpus, memBytes] = (await this.run(['info', '--format', '{{.NCPU}} {{.MemTotal}}']))
+      .trim()
+      .split(/\s+/)
+      .map(Number);
+    if (!cpus || !memBytes) {
+      throw new DockerLifecycleError('docker-failed', 'Docker did not report its CPU and memory');
+    }
+    return { vcpuCount: cpus, memoryMb: Math.floor(memBytes / (1024 * 1024)) };
+  }
+
   async nodeState(): Promise<'running' | 'stopped' | 'missing'> {
     const out = await this.run([
       'ps',
