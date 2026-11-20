@@ -117,6 +117,20 @@ packages/
 └── vm-agent/     # Go VM agent (PTY, WebSocket, ACP)
 ```
 
+## Desktop App (`apps/desktop`)
+
+The [local desktop app](/docs/guides/local-desktop/) runs `apps/api` on local workerd with `SAM_RUNTIME_MODE=local`, supervised by Electron.
+
+```bash
+pnpm --filter @simple-agent-manager/desktop test       # unit tests
+VITE_API_URL=http://127.0.0.1:8790 pnpm --filter @simple-agent-manager/web build
+pnpm --filter @simple-agent-manager/desktop test:e2e   # Electron E2E; on Linux use xvfb-run -a
+```
+
+- Set an absolute `SAM_LOCAL_DATA_DIR` to keep test data out of your real data folder.
+- On Linux without a keyring, Electron `safeStorage` falls back to `basic_text`. SAM treats that as unavailable, so saving provider keys fails. For development only, `SAM_ALLOW_UNPROTECTED_CREDENTIALS=1` lets them be stored unprotected.
+- If the Electron binary is missing, run `node apps/desktop/node_modules/electron/install.js`.
+
 ## Staging Deployment
 
 For real testing, deploy to a staging environment:

@@ -309,6 +309,17 @@ Outside anonymous trials, escaping a devcontainer reaches only the user's own VM
 
 Ways to run nested containers without `privileged`, such as a user-namespaced container runtime, are welcome improvements, provided Docker, Compose and Testcontainers keep working inside workspaces.
 
+## Local Desktop Trust Boundaries
+
+The [local desktop app](/docs/guides/local-desktop/) runs only when `SAM_RUNTIME_MODE=local`. Hosted deployments never take these code paths.
+
+- **Loopback only.** The local API binds to `127.0.0.1` and rejects requests whose Host header isn't a loopback name. Docker API access and Ollama are never published to the network.
+- **One local principal.** Sign-in uses an HttpOnly, `SameSite=Strict` `sam_local_session` cookie, issued through a bootstrap secret that only the desktop supervisor holds.
+- **Model gateway.** Workspace containers reach the local model only through SAM's model gateway on a private Docker network. Each request needs a workspace-scoped token. The gateway forwards only to loopback addresses and does not follow redirects.
+- **No cloud requests.** In local mode, outbound requests to Cloudflare and VM-provider hosts are blocked, and local health lists any off-machine host the API tried to reach.
+- **Protected secrets.** The local signing and encryption keys and every provider API key are sealed with Electron `safeStorage` (Windows DPAPI). Provider keys live in the desktop credential store. The `credentials` and `cc_credentials` tables hold only `sam-local-ref:<id>` references, which the API resolves through a loopback broker authenticated with the bootstrap secret. SAM refuses to save a key when protected storage is unavailable. Unreferenced keys are removed after a successful credential change.
+- **Label-scoped cleanup.** SAM removes only Docker resources labelled with this installation's `sam.installation` ID, and it reports a removal only after Docker confirms it.
+
 ## Security Best Practices
 
 - **Rotate keys quarterly** — regenerate JWT and encryption keys
