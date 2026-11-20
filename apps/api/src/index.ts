@@ -202,7 +202,11 @@ app.use('*', localRuntimeGuard());
 // Spec 036 T035: after a credential change, drop desktop-stored secrets nothing references.
 app.use('*', async (c, next) => {
   const tracked = isLocalRuntime(c.env) && c.req.method !== 'GET' && /credential/.test(c.req.path);
-  const before = tracked ? await referencedLocalSecrets(c.env).catch(() => undefined) : undefined;
+  // Only a removal skips the fresh-entry window: a replacing save may race another save's mirror.
+  const before =
+    tracked && c.req.method === 'DELETE'
+      ? await referencedLocalSecrets(c.env).catch(() => undefined)
+      : undefined;
   await next();
   if (!tracked || c.res.status >= 400) return;
   await sweepLocalSecrets(c.env, before).catch((error: unknown) =>
