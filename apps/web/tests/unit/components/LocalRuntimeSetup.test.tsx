@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ request: vi.fn() }));
 
+vi.mock('../../../src/components/LocalModelConnection', () => ({
+  LocalModelConnection: () => null,
+}));
 vi.mock('../../../src/hooks/useQueryScope', () => ({ useQueryScope: () => 'local-test' }));
 
 vi.mock('../../../src/lib/api/client', async (importOriginal) => ({

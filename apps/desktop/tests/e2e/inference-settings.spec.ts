@@ -8,13 +8,30 @@ import { expect, test } from '@playwright/test';
 
 import { closeMainWindow, launchDesktop, ORIGIN } from './helpers';
 
-const SHOTS = fileURLToPath(new URL('../../../../.codex/tmp/playwright-screenshots/', import.meta.url));
+const SHOTS = fileURLToPath(
+  new URL('../../../../.codex/tmp/playwright-screenshots/', import.meta.url)
+);
 
 test('OpenCode inference mode is chosen explicitly and survives a reload', async () => {
   const root = await mkdtemp(join(tmpdir(), 'sam-e2e-inference-'));
   try {
     const { app, window } = await launchDesktop(join(root, 'data'));
     await expect(window).toHaveURL(`${ORIGIN}/projects/new`, { timeout: 60_000 });
+    await window.goto(`${ORIGIN}/setup`);
+    const connection = window.getByTestId('local-model-connection');
+    await expect(connection).toBeVisible({ timeout: 30_000 });
+    await connection
+      .getByPlaceholder(/qwen2.5-coder/)
+      .fill(process.env.SAM_E2E_LOCAL_MODEL ?? 'qwen2.5:0.5b');
+    await connection.getByRole('button', { name: /save and check/i }).click();
+    await expect(connection.getByText(/Connected\. \d+ model/)).toBeVisible({ timeout: 30_000 });
+    await window.setViewportSize({ width: 375, height: 667 });
+    await connection.scrollIntoViewIfNeeded();
+    await window.screenshot({ path: join(SHOTS, 'local-model-mobile.png') });
+    await window.setViewportSize({ width: 1280, height: 800 });
+    await connection.scrollIntoViewIfNeeded();
+    await window.screenshot({ path: join(SHOTS, 'local-model-desktop.png') });
+
     await window.goto(`${ORIGIN}/settings/agents`);
 
     const mode = window.getByTestId('inference-mode');
