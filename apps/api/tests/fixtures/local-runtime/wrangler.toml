@@ -1,0 +1,19 @@
+# T001 feasibility fixture. Local-only: no account, remote bindings, AI, containers, or crons.
+name = "sam-local-runtime-feasibility"
+main = "entry.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DATABASE"
+database_name = "sam-local-feasibility"
+database_id = "local-only"
+migrations_dir = "../../../src/db/migrations"
+
+[[durable_objects.bindings]]
+name = "PROJECT_DATA"
+class_name = "ProjectData"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ProjectData"]

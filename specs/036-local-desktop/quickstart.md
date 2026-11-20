@@ -31,3 +31,37 @@ This is a planning-stage verification checklist, not a claim that the packaged l
 - Do not substitute Miniflare unit tests or a page-load check for the packaged Windows workspace-to-agent-to-model path.
 
 Record Windows/build/runtime versions, exact commands, endpoint-routing evidence, Docker resource IDs/labels, persistence results, and cleanup outcomes. Any failed stop condition requires an architecture decision before implementation continues.
+
+## Feasibility Evidence (Linux pre-check, 2026-11-20)
+
+Run on an Ubuntu 22.04 VM (kernel 6.8, Docker Engine 29.9.2, Node 24.22.2, pnpm 9.15.9, Ollama 0.40.16 with `qwen2.5:0.5b`). Wrangler 4.149.0 / workerd 1.20261006.1 (pinned via the pnpm catalog). No Cloudflare credentials were present; the T001 test also strips `CLOUDFLARE_*`/`CF_*` from the child environment. **These results do not replace the Windows Docker Desktop/WSL2 checks below, which remain open.**
+
+### T001 — local Worker runtime: PASS on Linux (Windows run pending)
+
+```bash
+pnpm turbo run build --filter=@simple-agent-manager/api^...
+cd apps/api
+SAM_LOCAL_RUNTIME_FEASIBILITY=1 pnpm exec vitest run tests/integration/local-runtime-feasibility.test.ts
+```
+
+- `tests/fixtures/local-runtime/` serves the real `ProjectData` Durable Object (SQLite-backed, its own schema migrations) and D1 through `wrangler dev --local --persist-to <dir>`.
+- `wrangler d1 migrations apply DATABASE --local` applies the full chain (`0000`…`0205`) to an empty local store.
+- A D1 row and `ProjectData` sessions written in one runtime process are read back after 3 restarts.
+- The full `apps/api/wrangler.toml` also starts locally (`wrangler dev --local`, `/health` returns `healthy`; D1, KV, R2 and all DO bindings are local), but Wrangler reports `AI` and `ARTIFACTS` as remote-only bindings, Containers need a local Docker build, and crons are not triggered locally. The local runtime therefore needs its own config without `AI`, `ARTIFACTS`, Containers and crons, plus API-side rejection of those paths in local mode (T007). No Node/SQLite adapter is required.
+
+### T003 — private model path: PASS on Linux (Windows run pending)
+
+```bash
+cd apps/desktop
+SAM_FEASIBILITY_DIND_IMAGE=docker:27-dind pnpm test:feasibility
+```
+
+`tests/feasibility/model-gateway-network.spec.ts` (7 tests) proves:
+
+- Ollama listens on `127.0.0.1:11434` only; it is not reachable on LAN-facing or Docker-network addresses.
+- The SAM gateway (`apps/desktop/src/main/model-gateway.ts`) binds only to loopback or an explicitly verified private-network address (here, the SAM Docker network gateway).
+- A workspace container on that network, using `--add-host sam-model-gateway:<gateway-ip>`, lists the scoped model and receives a streamed (SSE) completion from Ollama through the gateway with a workspace-scoped `samgw_` token.
+- Requests without a valid token get 401; the workspace cannot reach Ollama directly; the gateway port is not reachable on LAN-facing addresses or loopback.
+- A privileged `docker:27-dind` workspace on the same network (the supported nested-Docker shape) reaches the gateway, with no Docker API port published on the host.
+
+Windows differences to verify: Docker Desktop routes `host-gateway`/`host.docker.internal` to the Windows host loopback, so the gateway should bind `127.0.0.1` there. Check that workspaces reach it through `--add-host sam-model-gateway:host-gateway`, that Ollama stays on `127.0.0.1`, and that a second LAN device cannot reach the gateway, the control port or Ollama. On Docker Desktop, workspaces can probably also reach other host-loopback services (including Ollama) directly through `host.docker.internal`. Record whether that holds; it is not LAN exposure, but it does mean the gateway is the credential boundary rather than a network boundary.

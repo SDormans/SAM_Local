@@ -1,0 +1,20 @@
+{
+  "name": "@simple-agent-manager/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows single-user local SAM desktop runtime (local-only; not used by hosted deployments)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:feasibility": "vitest run --config vitest.feasibility.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
