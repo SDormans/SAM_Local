@@ -13,7 +13,7 @@ import type { VMSize, WorkspaceProfile, WorkspaceResponse } from './workspace';
 export type ProjectStatus = 'active' | 'detached';
 
 /** Git repository provider for a project. */
-export type RepoProvider = 'github' | 'artifacts' | 'gitlab';
+export type RepoProvider = 'github' | 'artifacts' | 'gitlab' | 'local';
 
 /**
  * Per-project agent defaults. Keys are agent types (claude-code, openai-codex, etc.).
@@ -118,8 +118,10 @@ export interface CreateProjectRequest {
   /** Required for GitLab projects. Numeric GitLab project ID selected by the user. */
   gitlabProjectId?: number;
   defaultBranch?: string;
-  /** Repo provider: 'github' (default), 'artifacts', or 'gitlab'. */
+  /** Repo provider: 'github' (default), 'artifacts', 'gitlab', or 'local' (desktop only). */
   repoProvider?: RepoProvider;
+  /** Required for local desktop projects: absolute path of the user-selected folder. */
+  localPath?: string;
 }
 
 export interface UpdateProjectRequest {

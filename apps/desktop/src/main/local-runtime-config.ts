@@ -27,7 +27,20 @@ export interface LocalWranglerConfigOptions {
   apiDir: string;
   installationId: string;
   sessionTtlSeconds?: number;
+  /** Built `apps/web` output served same-origin with the API; omitted for API-only runs. */
+  webDistDir?: string;
 }
+
+/** API paths that must reach the Worker even when a static asset could match. */
+export const LOCAL_WORKER_FIRST_PATHS = [
+  '/api/*',
+  '/health',
+  '/.well-known/*',
+  '/mcp/*',
+  '/ai/*',
+  '/auth/*',
+  '/connect/*',
+] as const;
 
 function asTables(value: unknown): JsonMap[] {
   return Array.isArray(value) ? (value as JsonMap[]) : [];
@@ -62,5 +75,13 @@ export function buildLocalWranglerConfig(
       ? { LOCAL_SESSION_TTL_SECONDS: String(options.sessionTtlSeconds) }
       : {}),
   };
+  if (options.webDistDir) {
+    if (!isAbsolute(options.webDistDir)) throw new Error('webDistDir must be absolute');
+    config.assets = {
+      directory: options.webDistDir,
+      not_found_handling: 'single-page-application',
+      run_worker_first: [...LOCAL_WORKER_FIRST_PATHS],
+    };
+  }
   return stringify(config);
 }

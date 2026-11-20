@@ -93,3 +93,28 @@ Unit tests cover the rest:
 - **Runtime boundary and local sessions:** the outbound guard, Workers AI poisoning, and Host parsing; local sessions store only a token hash and reject expired, revoked, cross-installation and malformed sessions.
 
 **Known limitation (to resolve with T002 on Windows):** the generated `.dev.vars` and `runtime/secrets.json` are owner-only files (`0600`) in the per-user data directory. They are not yet encrypted with Electron `safeStorage`. They hold installation signing, encryption and bootstrap secrets, never provider credentials.
+
+## Desktop Shell Evidence (Linux, 2026-11-20)
+
+```bash
+pnpm turbo run build --filter=@simple-agent-manager/api^... --filter=@simple-agent-manager/web^...
+VITE_API_URL=http://127.0.0.1:8790 pnpm --filter @simple-agent-manager/web build
+node apps/desktop/node_modules/electron/install.js   # only if pnpm skipped Electron's binary download
+cd apps/desktop && pnpm build && xvfb-run -a pnpm exec playwright test --config playwright.config.ts
+```
+
+The Electron app (`apps/desktop/src/main/index.ts`) has these protections:
+
+- The renderer runs with `contextIsolation`, `sandbox` and no `nodeIntegration`. All permission requests are denied, and the window cannot navigate off `http://127.0.0.1:8790`.
+- The preload bridge exposes only folder selection and runtime status. IPC calls are accepted only from the local origin.
+- The local session cookie is set by the main process as HttpOnly, so the renderer never sees the bootstrap secret.
+
+The e2e suite (3 tests) proves:
+
+- **First run:** no Cloudflare credentials are needed, and a local-folder project is created without cloning. It survives a full app restart, and launch to project took well under 5 minutes.
+- **Close with active work:** the prompt's default button is "Stop work and quit". Choosing background hides the window while the API keeps running; choosing stop shuts the API down before the process exits.
+- **Close without active work:** SAM stops and quits without a prompt.
+
+The web UI is the normal `apps/web` build, served same-origin by the local Worker through wrangler `[assets]`.
+
+**Still open for the owner on Windows (T002):** an installer package, the tray icon artwork, and Windows process-tree stop.

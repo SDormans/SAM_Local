@@ -39,6 +39,13 @@ export async function resolveWorkspaceGitSource(
   db: Db,
   project: WorkspaceGitSourceProject
 ): Promise<WorkspaceGitSource> {
+  if (project.repoProvider === 'local') {
+    // Spec 036: local folders are mounted by the desktop workspace driver, never cloned.
+    throw Object.assign(
+      new Error(`Project ${project.id} is a local folder and cannot be cloned onto a remote VM`),
+      { permanent: true }
+    );
+  }
   const repoProvider = normalizeRepoProvider(project.repoProvider);
   if (repoProvider !== 'gitlab') {
     return {
