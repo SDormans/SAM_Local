@@ -50,7 +50,14 @@ localModelsRoutes.post(
       throw errors.notFound('Local model connection');
     }
     const result = await verifyLocalModelConnection(connection);
-    if (result.status !== 'usable') return c.json(result, 502);
+    if (result.status !== 'usable') {
+      const error =
+        result.status === 'unavailable' ? 'LOCAL_MODEL_UNAVAILABLE' : 'LOCAL_MODEL_INCOMPATIBLE';
+      return c.json(
+        { error, message: result.message ?? 'The local model is not usable', ...result },
+        502
+      );
+    }
     // Only stamp the settings that were checked; a save during verification wins.
     const current = await readLocalModelConnection(c.env);
     if (
