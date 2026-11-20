@@ -35,6 +35,7 @@ import type { Env } from '../../env';
 import { maskCredential } from '../../lib/credential-mask';
 import { getCredentialEncryptionKey } from '../../lib/secrets';
 import { ulid } from '../../lib/ulid';
+import { sealCredential } from '../../local/local-secret-store';
 import { getUserId, requireApproved, requireAuth } from '../../middleware/auth';
 import { errors } from '../../middleware/error';
 import { requireProjectCapability } from '../../middleware/project-auth';
@@ -47,7 +48,7 @@ import {
   disconnectComputeCredentialFromCC,
   syncComputeCredentialToCC,
 } from '../../services/composable-credentials/compute-sync';
-import { decrypt, encrypt } from '../../services/encryption';
+import { decrypt } from '../../services/encryption';
 import { getTimeoutMs } from '../../services/fetch-timeout';
 import { serializeCredentialToken } from '../../services/provider-credentials';
 import {
@@ -295,7 +296,7 @@ projectCredentialsRoutes.put(
     const requestBody = c.req.valid('json');
     const { providerName, tokenToValidate: tokenToEncrypt } = getCloudCredentialFields(requestBody);
     const validation = await validateCloudCredentialRequest(requestBody, c.env);
-    const { ciphertext, iv } = await encrypt(tokenToEncrypt, getCredentialEncryptionKey(c.env));
+    const { ciphertext, iv } = await sealCredential(c.env, tokenToEncrypt);
 
     const existing = await db
       .select()

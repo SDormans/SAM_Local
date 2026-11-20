@@ -15,15 +15,17 @@ import {
   type IpcMainInvokeEvent,
   Menu,
   nativeImage,
+  safeStorage,
   session,
   shell,
   Tray,
 } from 'electron';
 
 import { CLOSE_PROMPT, handleCloseRequest } from './lifecycle.js';
-import { resolveDataDirectory } from './local-data.js';
+import { LocalDataStore, resolveDataDirectory } from './local-data.js';
 import { probePrerequisites } from './prerequisites.js';
 import { isTrustedSender, selectProjectFolder } from './project-dialog.js';
+import { fetchKnownWorkspaces, reconcileWorkspaces } from './recovery.js';
 import {
   type LocalSessionCookie,
   ServiceSupervisor,
@@ -31,6 +33,7 @@ import {
   sessionRenewalTimingFromEnv,
   type SupervisorStatus,
 } from './service-supervisor.js';
+import { parseUninstallArg, performUninstall, type UninstallChoice } from './uninstall.js';
 import { DockerDesktopDriver } from './workspaces/docker-desktop.js';
 import {
   DEFAULT_LOCAL_NODE_IMAGE,
@@ -55,11 +58,29 @@ const supervisor = new ServiceSupervisor({
   localDefaultModel: process.env.SAM_LOCAL_DEFAULT_MODEL,
   onOutput: (chunk: string) => process.stdout.write(chunk),
   probePrerequisites: () => probePrerequisites(),
+  secretProtector: {
+    isAvailable: () =>
+      safeStorage.isEncryptionAvailable() &&
+      (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+    encrypt: (plaintext) => safeStorage.encryptString(plaintext),
+    decrypt: (ciphertext) => safeStorage.decryptString(ciphertext),
+  },
   startWorkspaceRuntime:
     process.env.SAM_LOCAL_WORKSPACES === 'off'
       ? undefined
       : async ({ apiUrl, bootstrapSecret, installationId }) => {
-          const node = new LocalNode(new DockerDesktopDriver(installationId));
+          const driver = new DockerDesktopDriver(installationId);
+          const recovery = await reconcileWorkspaces(
+            driver,
+            await fetchKnownWorkspaces(apiUrl, bootstrapSecret)
+          ).catch((error: unknown) => {
+            console.warn('[recovery] startup reconciliation skipped:', (error as Error).message);
+            return null;
+          });
+          if (recovery?.pending.length) {
+            console.warn('[recovery] cleanup pending for', JSON.stringify(recovery.pending));
+          }
+          const node = new LocalNode(driver);
           await node.start({
             apiUrl,
             bootstrapSecret,
@@ -262,7 +283,36 @@ async function launch(): Promise<void> {
   await mainWindow.loadURL(`${appOrigin}${ready ? '/projects/new' : '/setup'}`);
 }
 
-if (!app.requestSingleInstanceLock()) {
+const uninstallChoice = parseUninstallArg(process.argv);
+
+async function runUninstall(choice: UninstallChoice): Promise<void> {
+  const dataDir = resolveDataDirectory();
+  const installation = await new LocalDataStore(dataDir).readInstallation().catch(() => null);
+  const result = await performUninstall({
+    choice,
+    dataDir,
+    removeContainers: async () => {
+      if (!installation) throw new Error('No SAM installation record found');
+      return new DockerDesktopDriver(installation.installationId).removeAll();
+    },
+  });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
+if (uninstallChoice) {
+  if (!app.requestSingleInstanceLock()) {
+    process.stderr.write('Close SAM before uninstalling.\n');
+    app.exit(2);
+  } else {
+    void runUninstall(uninstallChoice).then(
+      () => app.exit(0),
+      (error: unknown) => {
+        process.stderr.write(`${(error as Error).message}\n`);
+        app.exit(1);
+      }
+    );
+  }
+} else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {

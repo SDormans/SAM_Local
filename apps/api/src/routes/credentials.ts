@@ -26,6 +26,7 @@ import { maskCredential } from '../lib/credential-mask';
 import { log } from '../lib/logger';
 import { getCredentialEncryptionKey } from '../lib/secrets';
 import { ulid } from '../lib/ulid';
+import { sealCredential } from '../local/local-secret-store';
 import { getUserId, requireApproved, requireAuth } from '../middleware/auth';
 import { errors } from '../middleware/error';
 import { rateLimitCredentialUpdate } from '../middleware/rate-limit';
@@ -50,7 +51,7 @@ import {
   lazyBackfillIfNeeded,
 } from '../services/composable-credentials/lazy-backfill';
 import { resolveForConsumer } from '../services/composable-credentials/resolve';
-import { decrypt, encrypt } from '../services/encryption';
+import { decrypt } from '../services/encryption';
 import { getTimeoutMs } from '../services/fetch-timeout';
 import {
   deleteUserGcpCredential,
@@ -346,7 +347,7 @@ credentialsRoutes.post('/', jsonValidator(CreateCredentialSchema), async (c) => 
   }
 
   // Encrypt the serialized credential token
-  const { ciphertext, iv } = await encrypt(tokenToEncrypt, getCredentialEncryptionKey(c.env));
+  const { ciphertext, iv } = await sealCredential(c.env, tokenToEncrypt);
 
   // Check if credential already exists for this provider
   const existing = await db

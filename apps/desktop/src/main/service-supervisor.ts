@@ -15,7 +15,16 @@ import {
 } from './local-api-runtime.js';
 import { type InstallationRecord, latestMigrationVersion, LocalDataStore } from './local-data.js';
 import type { LocalPrerequisites } from './prerequisites.js';
-import { loadOrCreateRuntimeSecrets, type LocalRuntimeSecrets } from './runtime-secrets.js';
+import {
+  CredentialStore,
+  type RunningCredentialBroker,
+  startCredentialBroker,
+} from './credential-store.js';
+import {
+  loadOrCreateRuntimeSecrets,
+  type LocalRuntimeSecrets,
+  type SecretProtector,
+} from './runtime-secrets.js';
 
 export type ServiceState = 'stopped' | 'starting' | 'running' | 'stopping' | 'failed';
 
@@ -54,6 +63,7 @@ export interface ServiceSupervisorOptions {
   webDistDir?: string;
   wranglerBin?: string;
   probePrerequisites: () => Promise<LocalPrerequisites>;
+  secretProtector?: SecretProtector;
   startApi?: (options: LocalApiRuntimeOptions) => Promise<RunningLocalApi>;
   migrate?: typeof applyLocalMigrations;
   fetchImpl?: typeof fetch;
@@ -116,6 +126,7 @@ export class ServiceSupervisor extends EventEmitter {
   private current: SupervisorStatus = { state: 'stopped' };
   private api: RunningLocalApi | undefined;
   private secrets: LocalRuntimeSecrets | undefined;
+  private credentialBroker: RunningCredentialBroker | undefined;
   private workspaceRuntime: RunningWorkspaceRuntime | undefined;
   private startup: Promise<SupervisorStatus> | undefined;
   private sessionCookie: LocalSessionCookie | undefined;
@@ -162,8 +173,16 @@ export class ServiceSupervisor extends EventEmitter {
     let installation: InstallationRecord | undefined;
     try {
       installation = await this.store.init();
-      const secrets = await loadOrCreateRuntimeSecrets(join(this.store.runtimeDir, 'secrets.json'));
+      const secrets = await loadOrCreateRuntimeSecrets(
+        join(this.store.runtimeDir, 'secrets.json'),
+        this.options.secretProtector
+      );
       this.secrets = secrets;
+      await this.credentialBroker?.stop();
+      this.credentialBroker = await startCredentialBroker(
+        new CredentialStore(join(this.store.runtimeDir, 'credentials.json'), this.options.secretProtector),
+        secrets.LOCAL_BOOTSTRAP_SECRET
+      );
       const runtime: LocalApiRuntimeOptions = {
         apiDir: this.options.apiDir,
         store: this.store,
@@ -172,6 +191,7 @@ export class ServiceSupervisor extends EventEmitter {
         port: this.options.port,
         nodeAgentPort: this.options.nodeAgentPort,
         localDefaultModel: this.options.localDefaultModel,
+        secretBrokerUrl: this.credentialBroker.url,
         wranglerBin: this.options.wranglerBin,
         webDistDir: this.options.webDistDir,
         onOutput: this.options.onOutput,
@@ -323,6 +343,8 @@ export class ServiceSupervisor extends EventEmitter {
       await this.stopWorkspaceRuntime();
       await api.stop();
       this.api = undefined;
+      await this.credentialBroker?.stop();
+      this.credentialBroker = undefined;
       this.sessionCookie = undefined;
       this.setStatus({ state: 'stopped', installationId: this.current.installationId });
     } catch (error) {

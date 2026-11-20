@@ -16,13 +16,12 @@ import { Hono } from 'hono';
 
 import * as schema from '../db/schema';
 import type { Env } from '../env';
-import { getCredentialEncryptionKey } from '../lib/secrets';
 import { ulid } from '../lib/ulid';
+import { sealCredential } from '../local/local-secret-store';
 import { requireApproved, requireAuth } from '../middleware/auth';
 import { getUserId } from '../middleware/auth';
 import { errors } from '../middleware/error';
 import { reconcileCapacityPoolsForCredentialMutation } from '../services/capacity-pool-credential-lifecycle';
-import { encrypt } from '../services/encryption';
 
 const ccRoutes = new Hono<{ Bindings: Env }>();
 
@@ -181,9 +180,8 @@ ccRoutes.post('/credentials', async (c) => {
     validateOpenAICompatibleSecret(secret);
   }
 
-  const encryptionKey = getCredentialEncryptionKey(c.env);
   const tokenToEncrypt = typeof secret === 'string' ? secret : JSON.stringify(secret);
-  const { ciphertext, iv } = await encrypt(tokenToEncrypt, encryptionKey);
+  const { ciphertext, iv } = await sealCredential(c.env, tokenToEncrypt);
 
   const id = `cc-cred-${ulid()}`;
   await db.insert(schema.ccCredentials).values({

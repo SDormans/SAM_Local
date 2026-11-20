@@ -45,6 +45,7 @@ import { withRequestScopedD1Bindings } from './lib/d1-session';
 import { log, serializeError } from './lib/logger';
 import { resolvePagesProxyTarget } from './lib/pages-proxy';
 import { parseWorkspaceSubdomain } from './lib/workspace-subdomain';
+import { sweepLocalSecrets } from './local/local-secret-store';
 import { isLocalRuntime, localRuntimeGuard, withLocalRuntimeBindings } from './local/runtime-mode';
 import { analyticsMiddleware } from './middleware/analytics';
 import { apiCors } from './middleware/api-cors';
@@ -198,6 +199,21 @@ app.onError(handleAppError);
 
 // Local desktop runtime (spec 036) only: loopback Host check and outbound cloud guard.
 app.use('*', localRuntimeGuard());
+// Spec 036 T035: after a credential change, drop desktop-stored secrets nothing references.
+app.use('*', async (c, next) => {
+  await next();
+  if (
+    !isLocalRuntime(c.env) ||
+    c.req.method === 'GET' ||
+    c.res.status >= 400 ||
+    !/credential/.test(c.req.path)
+  ) {
+    return;
+  }
+  await sweepLocalSecrets(c.env).catch((error: unknown) =>
+    log.warn('local_secret_sweep_failed', { error: (error as Error).message })
+  );
+});
 
 // Signed preview-host requests bypass session auth, credentialed CORS, Pages,
 // and workspace cookie handling.
