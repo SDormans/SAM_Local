@@ -20,7 +20,7 @@ export const CLOUD_ONLY_CONFIG_KEYS = [
   'build',
 ] as const;
 
-export const LOCAL_BASE_DOMAIN = 'sam-local.invalid';
+export const LOCAL_BASE_DOMAIN = 'sam.localhost';
 
 export interface LocalWranglerConfigOptions {
   /** Absolute path of `apps/api`; relative paths in its wrangler.toml resolve from here. */
@@ -54,8 +54,8 @@ export function buildLocalWranglerConfig(
     ...vars,
     SAM_RUNTIME_MODE: 'local',
     LOCAL_INSTALLATION_ID: options.installationId,
-    // Must not equal a loopback hostname: the API treats BASE_DOMAIN as the apex and
-    // redirects it to www.*. A reserved `.invalid` name matches no local request.
+    // Must not equal a loopback hostname (the API redirects the apex to www.*), but must be
+    // a `.localhost` name so credentialed CORS still accepts loopback origins.
     BASE_DOMAIN: LOCAL_BASE_DOMAIN,
     ARTIFACTS_ENABLED: 'false',
     ...(options.sessionTtlSeconds

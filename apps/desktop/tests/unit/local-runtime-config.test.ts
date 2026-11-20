@@ -6,6 +6,8 @@ import { join, resolve } from 'node:path';
 import { parse } from '@iarna/toml';
 import { describe, expect, it } from 'vitest';
 
+import { resolveCredentialedCorsOrigin } from '../../../api/src/lib/cors-origin';
+import { resolvePagesProxyTarget } from '../../../api/src/lib/pages-proxy';
 import { localRuntimeEnv } from '../../src/main/local-api-runtime';
 import {
   buildLocalWranglerConfig,
@@ -30,7 +32,16 @@ describe('buildLocalWranglerConfig', () => {
       ARTIFACTS_ENABLED: 'false',
       LOCAL_SESSION_TTL_SECONDS: '600',
     });
-    expect(vars.BASE_DOMAIN).toBe('sam-local.invalid');
+    expect(resolvePagesProxyTarget('localhost', { baseDomain: vars.BASE_DOMAIN! })).toEqual({
+      type: 'none',
+    });
+    expect(resolvePagesProxyTarget('127.0.0.1', { baseDomain: vars.BASE_DOMAIN! })).toEqual({
+      type: 'none',
+    });
+    for (const origin of ['http://127.0.0.1:8790', 'http://localhost:5173']) {
+      expect(resolveCredentialedCorsOrigin(origin, vars.BASE_DOMAIN)).toBe(origin);
+    }
+    expect(resolveCredentialedCorsOrigin('http://attacker.example', vars.BASE_DOMAIN)).toBeNull();
     const d1 = config.d1_databases as Array<{ binding: string; migrations_dir: string }>;
     const database = d1.find((d) => d.binding === 'DATABASE');
     expect(database?.migrations_dir).toBe(join(apiDir, 'src/db/migrations'));
