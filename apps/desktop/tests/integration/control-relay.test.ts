@@ -81,3 +81,43 @@ describe('control relay', () => {
     }
   });
 });
+
+describe('control relay model gateway routing', () => {
+  it('sends only model paths to the model gateway and 404s them when no gateway is set', async () => {
+    const hits: string[] = [];
+    const listen = async (name: string) => {
+      const server = createServer((req, res) => {
+        hits.push(`${name}:${req.url}`);
+        res.end('{}');
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      return server;
+    };
+    const api = await listen('api');
+    const gateway = await listen('gateway');
+    const port = (s: typeof api) => (s.address() as AddressInfo).port;
+    const relay = await startControlRelay({
+      bindHost: '127.0.0.1',
+      privateNetworkHosts: [],
+      apiPort: port(api),
+      modelGatewayPort: port(gateway),
+    });
+    const bare = await startControlRelay({
+      bindHost: '127.0.0.1',
+      privateNetworkHosts: [],
+      apiPort: port(api),
+    });
+    try {
+      expect((await fetch(`${relay.url}/local-model/v1/models`)).status).toBe(200);
+      expect((await fetch(`${relay.url}/api/workspaces/ws1/runtime`)).status).toBe(200);
+      expect((await fetch(`${relay.url}/local-model/v1/../../api/auth`)).status).toBe(404);
+      expect((await fetch(`${bare.url}/local-model/v1/models`)).status).toBe(404);
+      expect(hits).toEqual(['gateway:/local-model/v1/models', 'api:/api/workspaces/ws1/runtime']);
+    } finally {
+      await relay.close();
+      await bare.close();
+      api.close();
+      gateway.close();
+    }
+  });
+});
