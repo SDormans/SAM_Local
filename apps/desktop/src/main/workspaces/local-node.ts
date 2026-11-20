@@ -149,6 +149,7 @@ export class LocalNode {
 
   /** Stops the node and relay; workspaces stay so they can be resumed. */
   async stop(): Promise<void> {
+    await this.driver.stopWorkspaces().catch(() => undefined);
     await this.driver.stopNode().catch(() => undefined);
     await this.relay?.close();
     this.relay = undefined;

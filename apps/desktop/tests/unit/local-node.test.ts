@@ -31,6 +31,7 @@ describe('LocalNode', () => {
       engineResources: vi.fn(async () => ({ vcpuCount: 8, memoryMb: 16000 })),
       startNode: vi.fn(async () => undefined),
       stopNode: vi.fn(async () => undefined),
+      stopWorkspaces: vi.fn(async () => undefined),
       removeAll: vi.fn(async () => ({ removed: [], failed: [], complete: true })),
     };
     const relay = { url: 'http://172.20.0.1:40001', close: vi.fn(async () => undefined) };
@@ -96,6 +97,7 @@ describe('LocalNode', () => {
     const report = await node.removeAll();
     expect(report.complete).toBe(true);
     expect(driver.stopNode).toHaveBeenCalled();
+    expect(driver.stopWorkspaces).toHaveBeenCalled();
     expect(relay.close).toHaveBeenCalled();
   });
 

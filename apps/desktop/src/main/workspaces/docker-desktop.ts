@@ -216,6 +216,24 @@ export class DockerDesktopDriver {
     if ((await this.nodeState()) === 'running') await this.run(['stop', this.nodeName]);
   }
 
+  /** Stops (keeps) this installation's workspace containers so 'stop work' really stops agents. */
+  async stopWorkspaces(): Promise<void> {
+    const running = (
+      await this.run([
+        'ps',
+        '--filter',
+        `label=${this.installationLabel()}`,
+        '--filter',
+        `label=${LABEL_WORKSPACE}`,
+        '--format',
+        '{{.ID}}',
+      ])
+    )
+      .split('\n')
+      .filter(Boolean);
+    if (running.length) await this.run(['stop', ...running]);
+  }
+
   private async listIds(kind: 'container' | 'volume', labels: string[]): Promise<string[]> {
     const filters = labels.flatMap((label) => ['--filter', `label=${label}`]);
     const args =

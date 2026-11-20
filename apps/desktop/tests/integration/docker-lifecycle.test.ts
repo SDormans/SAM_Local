@@ -100,6 +100,39 @@ describe.runIf(dockerAvailable())('DockerDesktopDriver (real Docker)', () => {
     expect(await docker('exec', driver.nodeName, 'cat', '/var/lib/vm-agent/marker')).toBe('kept');
   }, 60_000);
 
+  it("stops this installation's running workspaces without removing them", async () => {
+    const workspace = `sam-ws-${id}`;
+    const other = `other-${id}`;
+    await docker(
+      'run',
+      '-d',
+      '--name',
+      workspace,
+      '--label',
+      `sam.installation=${id}`,
+      '--label',
+      `sam.workspace=w-${id}`,
+      'alpine:latest',
+      'sleep',
+      '300'
+    );
+    await docker(
+      'run',
+      '-d',
+      '--name',
+      other,
+      '--label',
+      `sam.workspace=w-${id}`,
+      'alpine:latest',
+      'sleep',
+      '300'
+    );
+    await driver.stopWorkspaces();
+    expect(await docker('inspect', '-f', '{{.State.Running}}', workspace)).toBe('false');
+    expect(await docker('inspect', '-f', '{{.State.Running}}', other)).toBe('true');
+    await docker('rm', '-f', workspace, other);
+  }, 60_000);
+
   it('removes only labeled workspace resources and reports cleanup truthfully', async () => {
     const ws = 'ws1';
     const labels = [
