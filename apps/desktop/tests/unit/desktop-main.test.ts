@@ -8,7 +8,11 @@ import { choiceFromResponse, CLOSE_PROMPT, handleCloseRequest } from '../../src/
 import type { RunningLocalApi } from '../../src/main/local-api-runtime';
 import { probePrerequisites, type RunCommand, runCommand } from '../../src/main/prerequisites';
 import { isTrustedSender, selectProjectFolder } from '../../src/main/project-dialog';
-import { ServiceSupervisor, sessionRenewalDelayMs } from '../../src/main/service-supervisor';
+import {
+  ServiceSupervisor,
+  sessionRenewalDelayMs,
+  sessionRenewalTimingFromEnv,
+} from '../../src/main/service-supervisor';
 
 const apiDir = resolve(__dirname, '../../../api');
 let root: string;
@@ -308,6 +312,14 @@ describe('ServiceSupervisor', () => {
     expect(sessionRenewalDelayMs(1_000_000, 0)).toBe(1_000_000 - 600_000);
     expect(sessionRenewalDelayMs(0, 0)).toBe(60_000);
     expect(sessionRenewalDelayMs(Number.MAX_SAFE_INTEGER, 0)).toBe(2_147_483_647);
+    expect(sessionRenewalDelayMs(100_000, 0, { marginMs: 30_000, minMs: 5_000 })).toBe(70_000);
+    expect(sessionRenewalDelayMs(0, 0, { minMs: 5_000 })).toBe(5_000);
+    expect(
+      sessionRenewalTimingFromEnv({
+        SAM_LOCAL_SESSION_RENEW_MARGIN_MS: '30000',
+        SAM_LOCAL_SESSION_RENEW_MIN_MS: 'bad',
+      })
+    ).toEqual({ marginMs: 30_000, minMs: 60_000 });
   });
 
   it('reports a crash during startup instead of running', async () => {

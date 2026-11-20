@@ -45,16 +45,41 @@ export interface ServiceSupervisorOptions {
   onOutput?: (chunk: string) => void;
 }
 
-const SESSION_RENEW_MARGIN_MS = 10 * 60_000;
-const SESSION_RENEW_MIN_MS = 60_000;
+export const DEFAULT_SESSION_RENEW_MARGIN_MS = 10 * 60_000;
+export const DEFAULT_SESSION_RENEW_MIN_MS = 60_000;
 const MAX_TIMER_MS = 2_147_483_647;
 
+export interface SessionRenewalTiming {
+  /** Renew this long before expiry (env: SAM_LOCAL_SESSION_RENEW_MARGIN_MS). */
+  marginMs?: number;
+  /** Shortest wait, also the retry delay after a failed renewal (env: SAM_LOCAL_SESSION_RENEW_MIN_MS). */
+  minMs?: number;
+}
+
+function positiveMs(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/** Reads renewal timing overrides from the environment. */
+export function sessionRenewalTimingFromEnv(
+  env: NodeJS.ProcessEnv
+): Required<SessionRenewalTiming> {
+  return {
+    marginMs: positiveMs(env.SAM_LOCAL_SESSION_RENEW_MARGIN_MS, DEFAULT_SESSION_RENEW_MARGIN_MS),
+    minMs: positiveMs(env.SAM_LOCAL_SESSION_RENEW_MIN_MS, DEFAULT_SESSION_RENEW_MIN_MS),
+  };
+}
+
 /** How long to wait before renewing a local session that expires at `expiresAt`. */
-export function sessionRenewalDelayMs(expiresAt: number, now: number = Date.now()): number {
-  return Math.min(
-    MAX_TIMER_MS,
-    Math.max(SESSION_RENEW_MIN_MS, expiresAt - now - SESSION_RENEW_MARGIN_MS)
-  );
+export function sessionRenewalDelayMs(
+  expiresAt: number,
+  now: number = Date.now(),
+  timing: SessionRenewalTiming = {}
+): number {
+  const marginMs = timing.marginMs ?? DEFAULT_SESSION_RENEW_MARGIN_MS;
+  const minMs = timing.minMs ?? DEFAULT_SESSION_RENEW_MIN_MS;
+  return Math.min(MAX_TIMER_MS, Math.max(minMs, expiresAt - now - marginMs));
 }
 
 const ACTIVE_WORKSPACE_STATES = new Set(['pending', 'creating', 'running', 'recovery', 'stopping']);

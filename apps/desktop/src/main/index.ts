@@ -27,6 +27,7 @@ import {
   type LocalSessionCookie,
   ServiceSupervisor,
   sessionRenewalDelayMs,
+  sessionRenewalTimingFromEnv,
   type SupervisorStatus,
 } from './service-supervisor.js';
 
@@ -35,6 +36,7 @@ const repoRoot = resolve(here, '../../../..');
 const DEFAULT_PORT = 8790;
 
 const port = Number(process.env.SAM_LOCAL_API_PORT ?? DEFAULT_PORT);
+const renewalTiming = sessionRenewalTimingFromEnv(process.env);
 const supervisor = new ServiceSupervisor({
   apiDir: process.env.SAM_DESKTOP_API_DIR ?? join(repoRoot, 'apps/api'),
   webDistDir: process.env.SAM_DESKTOP_WEB_DIST ?? join(repoRoot, 'apps/web/dist'),
@@ -198,13 +200,16 @@ async function installSessionCookie(cookie: LocalSessionCookie): Promise<void> {
 /** Keeps the renderer signed in for as long as SAM runs; sessions are never renewed by the renderer. */
 function scheduleSessionRenewal(expiresAt: number): void {
   clearTimeout(renewalTimer);
-  renewalTimer = setTimeout(() => {
-    if (supervisor.status.state !== 'running') return;
-    supervisor
-      .renewSession()
-      .then(installSessionCookie)
-      .catch(() => scheduleSessionRenewal(Date.now()));
-  }, sessionRenewalDelayMs(expiresAt));
+  renewalTimer = setTimeout(
+    () => {
+      if (supervisor.status.state !== 'running') return;
+      supervisor
+        .renewSession()
+        .then(installSessionCookie)
+        .catch(() => scheduleSessionRenewal(Date.now()));
+    },
+    sessionRenewalDelayMs(expiresAt, Date.now(), renewalTiming)
+  );
   renewalTimer.unref();
 }
 
