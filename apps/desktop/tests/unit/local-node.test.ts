@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DockerDesktopDriver } from '../../src/main/workspaces/docker-desktop';
 import {
   defaultProjectsRoot,
+  diskProbePath,
   LocalNode,
   relayPlacement,
 } from '../../src/main/workspaces/local-node';
@@ -46,6 +47,11 @@ describe('LocalNode', () => {
         platform: 'linux' as const,
         fetchImpl: vi.fn(async () => response) as unknown as typeof fetch,
         startRelay: vi.fn(async () => relay),
+        startGateway: vi.fn(async () => ({
+          host: '127.0.0.1',
+          port: 9911,
+          close: vi.fn(async () => {}),
+        })),
         statDisk: vi.fn(async () => ({ bavail: 50 * 1024 ** 2, bsize: 4096 })),
       },
     };
@@ -63,7 +69,11 @@ describe('LocalNode', () => {
       bindHost: '172.20.0.1',
       privateNetworkHosts: ['172.20.0.1'],
       apiPort: 8790,
+      modelGatewayPort: 9911,
     });
+    expect(options.startGateway).toHaveBeenCalledWith(
+      expect.objectContaining({ host: '127.0.0.1' })
+    );
     expect(options.fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:8790/api/local/node', {
       method: 'PUT',
       headers: { authorization: 'Bearer s3cret', 'content-type': 'application/json' },
@@ -93,5 +103,12 @@ describe('LocalNode', () => {
     const { node, driver, options } = fakes(new Response('nope', { status: 401 }));
     await expect(node.start(options)).rejects.toThrow(/registration failed \(401\): nope/);
     expect(driver.startNode).not.toHaveBeenCalled();
+  });
+});
+
+describe('diskProbePath', () => {
+  it('probes the host profile drive on Windows, where the projects root lives in the Docker VM', () => {
+    expect(diskProbePath('win32', '/run/desktop/mnt/host')).not.toBe('/run/desktop/mnt/host');
+    expect(diskProbePath('linux', '/home/me')).toBe('/home/me');
   });
 });

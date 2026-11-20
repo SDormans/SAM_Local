@@ -7,6 +7,7 @@
  * 4. Run the node agent container with its port published on loopback only.
  */
 import { statfs } from 'node:fs/promises';
+import { homedir } from 'node:os';
 
 import { type RunningControlRelay, startControlRelay } from '../control-relay.js';
 import { LOCAL_BASE_DOMAIN } from '../local-runtime-config.js';
@@ -51,6 +52,14 @@ export function relayPlacement(
     : { bindHost: '127.0.0.1', containerHost: 'host.docker.internal' };
 }
 
+/**
+ * Host path whose free space stands in for workspace disk capacity. On Windows the projects root
+ * is a path inside Docker Desktop's Linux VM, so probe the user's profile drive instead.
+ */
+export function diskProbePath(platform: NodeJS.Platform, projectsRoot: string): string {
+  return platform === 'win32' ? homedir() : projectsRoot;
+}
+
 /** Folder tree Docker Desktop exposes for local projects on this platform. */
 export function defaultProjectsRoot(platform: NodeJS.Platform, home: string): string {
   return platform === 'win32' ? '/run/desktop/mnt/host' : home;
@@ -93,7 +102,7 @@ export class LocalNode {
     const relayPort = new URL(this.relay.url).port;
 
     const engine = await this.driver.engineResources();
-    const disk = await (options.statDisk ?? statfs)(options.projectsRoot);
+    const disk = await (options.statDisk ?? statfs)(diskProbePath(platform, options.projectsRoot));
     const diskGb = Math.max(1, Math.floor((disk.bavail * disk.bsize) / 1024 ** 3));
     const response = await (options.fetchImpl ?? fetch)(`${options.apiUrl}/api/local/node`, {
       method: 'PUT',
