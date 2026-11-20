@@ -108,6 +108,11 @@ test('a local project chat gets a reply from the local model with no cloud reque
       )
       .toBe(true);
     console.log('[t019] assistant reply received');
+    const health = await window.evaluate(async (origin) => {
+      const res = await fetch(`${origin}/api/local/health`, { credentials: 'include' });
+      return (await res.json()) as { offMachineHosts?: string[] };
+    }, ORIGIN);
+    expect(health.offMachineHosts ?? []).toEqual([]);
   } finally {
     // A running agent triggers the close prompt; choose 'Stop work and quit'.
     await stubCloseChoice(app, 0).catch(() => undefined);

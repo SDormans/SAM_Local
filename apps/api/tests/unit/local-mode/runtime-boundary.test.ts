@@ -8,6 +8,7 @@ import {
   installLocalOutboundGuard,
   isBlockedLocalOutboundHost,
   isLocalRuntime,
+  localOffMachineHosts,
   localRuntimeGuard,
   withLocalRuntimeBindings,
 } from '../../../src/local/runtime-mode';
@@ -16,6 +17,18 @@ import { AppError } from '../../../src/middleware/error';
 const localEnv = { SAM_RUNTIME_MODE: 'local' } as Env;
 
 describe('local runtime boundary', () => {
+  it('records hosts off this computer but not loopback or local Docker hosts', async () => {
+    const guarded = createLocalOutboundFetch((async () => new Response('ok')) as typeof fetch);
+    await guarded('http://127.0.0.1:11434/api/tags');
+    await guarded('http://host.docker.internal:8790/health');
+    await guarded('http://api.sam.localhost/health');
+    await guarded('https://models.example.test/v1');
+    await expect(guarded('https://api.cloudflare.com/client/v4')).rejects.toBeInstanceOf(AppError);
+    const hosts = localOffMachineHosts();
+    expect(hosts).toEqual(expect.arrayContaining(['models.example.test', 'api.cloudflare.com']));
+    expect(hosts.some((h) => /127\.0\.0\.1|localhost|docker\.internal/.test(h))).toBe(false);
+  });
+
   it('is enabled only by SAM_RUNTIME_MODE=local', () => {
     expect(isLocalRuntime(localEnv)).toBe(true);
     expect(isLocalRuntime({} as Env)).toBe(false);

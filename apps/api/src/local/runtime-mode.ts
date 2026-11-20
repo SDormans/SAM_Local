@@ -50,9 +50,20 @@ function requestHostname(input: RequestInfo | URL): string | null {
   }
 }
 
+const LOCAL_OUTBOUND_HOST =
+  /^(localhost|127(\.\d{1,3}){3}|\[::1\]|host\.docker\.internal)$|\.localhost$/;
+const offMachineHosts = new Set<string>();
+
+/** Hosts off this computer that the local API tried to reach (spec 036 zero-cloud check). */
+export function localOffMachineHosts(): string[] {
+  return [...offMachineHosts].sort();
+}
+
 export function createLocalOutboundFetch(inner: typeof fetch): typeof fetch {
   const guarded = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const host = requestHostname(input);
+    const normalized = host?.toLowerCase().replace(/\.$/, '');
+    if (normalized && !LOCAL_OUTBOUND_HOST.test(normalized)) offMachineHosts.add(normalized);
     if (host && isBlockedLocalOutboundHost(host)) {
       return Promise.reject(localModeUnsupported(`Outbound access to ${host}`));
     }
