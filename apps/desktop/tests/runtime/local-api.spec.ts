@@ -4,8 +4,8 @@
  * access, and server-validated local sessions with ownership isolation.
  */
 import { spawn } from 'node:child_process';
-import { request } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
