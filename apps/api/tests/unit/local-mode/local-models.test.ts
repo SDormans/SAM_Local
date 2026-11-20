@@ -82,6 +82,22 @@ describe('verifyLocalModelConnection', () => {
     expect(result.message).toContain('Check that it is running');
   });
 
+  it('does not follow redirects away from the saved address', async () => {
+    let init: RequestInit | undefined;
+    const fetcher = (async (_url: string, options?: RequestInit) => {
+      init = options;
+      return new Response(null, { status: 302, headers: { location: 'http://10.0.0.5/' } });
+    }) as unknown as typeof fetch;
+    const result = await verifyLocalModelConnection(ollama, fetcher);
+    expect(init?.redirect).toBe('manual');
+    expect(result.status).toBe('incompatible');
+  });
+
+  it('treats a non-array model list as incompatible', async () => {
+    const result = await verifyLocalModelConnection(ollama, respond({ models: { name: 'x' } }));
+    expect(result.status).toBe('incompatible');
+  });
+
   it('reports a service without a model list as incompatible', async () => {
     const result = await verifyLocalModelConnection(ollama, respond({ error: 'nope' }, 404));
     expect(result.status).toBe('incompatible');

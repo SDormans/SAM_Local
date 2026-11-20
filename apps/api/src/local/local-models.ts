@@ -64,12 +64,13 @@ function listedModels(
   body: unknown
 ): string[] | null {
   const record = body as { models?: Array<{ name?: unknown }>; data?: Array<{ id?: unknown }> };
-  const items =
-    providerType === 'ollama'
-      ? record?.models?.map((m) => m?.name)
-      : record?.data?.map((m) => m?.id);
-  if (!Array.isArray(items)) return null;
-  return items.filter((name): name is string => typeof name === 'string');
+  const list: unknown = providerType === 'ollama' ? record?.models : record?.data;
+  if (!Array.isArray(list)) return null;
+  return list
+    .map((m: { name?: unknown; id?: unknown } | null) =>
+      providerType === 'ollama' ? m?.name : m?.id
+    )
+    .filter((name): name is string => typeof name === 'string');
 }
 
 /** Checks the service is reachable and reports the saved model; never changes any agent's mode. */
@@ -82,7 +83,11 @@ export async function verifyLocalModelConnection(
   const url = providerType === 'ollama' ? `${base}/api/tags` : `${base}/models`;
   let response: Response;
   try {
-    response = await fetcher(url, { signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS) });
+    // Redirects are not followed: the saved address is the only destination that was checked.
+    response = await fetcher(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
+    });
   } catch {
     return {
       connectionId,
