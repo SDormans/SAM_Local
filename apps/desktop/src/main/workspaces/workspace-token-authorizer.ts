@@ -27,11 +27,30 @@ function decodeClaims(token: string): CallbackClaims | null {
 }
 
 const WORKSPACE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+const LOOPBACK_HOST = /^(localhost|127(\.\d{1,3}){3}|\[::1\])$/;
+
+/** The gateway only ever forwards to a model service on this computer. */
+export function isLoopbackModelUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      !url.username &&
+      !url.password &&
+      LOOPBACK_HOST.test(url.hostname.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function createWorkspaceTokenAuthorizer(options: {
   apiUrl: string;
   fetchImpl?: typeof fetch;
   now?: () => number;
+  /** Receives the model service address saved in SAM settings, when the API reports one. */
+  onLocalModel?: (baseUrl: string) => void;
 }): (token: string | null) => Promise<TokenResolution> {
   const doFetch = options.fetchImpl ?? fetch;
   const now = options.now ?? Date.now;
@@ -53,6 +72,11 @@ export function createWorkspaceTokenAuthorizer(options: {
       { headers: { authorization: `Bearer ${token}` } }
     ).catch(() => null);
     if (!response?.ok) return { ok: false, reason: 'invalid' };
+    const runtime = (await response.json().catch(() => null)) as {
+      localModel?: { baseUrl?: unknown };
+    } | null;
+    const savedUrl = runtime?.localModel?.baseUrl;
+    if (isLoopbackModelUrl(savedUrl)) options.onLocalModel?.(savedUrl);
     return {
       ok: true,
       grant: { workspaceId, connectionId: LOCAL_MODEL_CONNECTION_ID, expiresAt },

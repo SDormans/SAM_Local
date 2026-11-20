@@ -28,6 +28,22 @@ describe('createWorkspaceTokenAuthorizer', () => {
     });
   });
 
+  it('passes on a saved local model address only when it is on this computer', async () => {
+    const seen: string[] = [];
+    const respond = (baseUrl: string) =>
+      createWorkspaceTokenAuthorizer({
+        apiUrl: 'http://127.0.0.1:8790',
+        fetchImpl: (async () =>
+          new Response(JSON.stringify({ localModel: { baseUrl } }))) as unknown as typeof fetch,
+        now: () => NOW,
+        onLocalModel: (url) => seen.push(url),
+      });
+    await expect(respond('http://127.0.0.1:11500')(valid)).resolves.toMatchObject({ ok: true });
+    await respond('http://192.168.1.20:11434')(valid);
+    await respond('http://user:pw@localhost:11434')(valid);
+    expect(seen).toEqual(['http://127.0.0.1:11500']);
+  });
+
   it('rejects tokens the API does not accept', async () => {
     const authorize = createWorkspaceTokenAuthorizer({
       apiUrl: 'http://127.0.0.1:8790',

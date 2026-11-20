@@ -25,6 +25,7 @@ import { parsePositiveInt } from '../../lib/route-helpers';
 import { getCredentialEncryptionKey } from '../../lib/secrets';
 import { ulid } from '../../lib/ulid';
 import { resolveLocalOpencodeInferenceConfig } from '../../local/local-inference';
+import { readLocalModelConnection } from '../../local/local-models';
 import { isLocalRuntime } from '../../local/runtime-mode';
 import { requireApproved, requireAuth } from '../../middleware/auth';
 import { errors } from '../../middleware/error';
@@ -1561,6 +1562,8 @@ runtimeRoutes.get('/:id/runtime', async (c) => {
   );
 
   await assertWorkspaceCallbackIdentityCurrent(c.env, workspace, 'runtime');
+  // Spec 036: tells the desktop model gateway which local model service this installation saved.
+  const localModel = isLocalRuntime(c.env) ? await readLocalModelConnection(c.env) : null;
   return c.json({
     workspaceId: workspace.workspaceId,
     repository: workspace.repository,
@@ -1569,6 +1572,7 @@ runtimeRoutes.get('/:id/runtime', async (c) => {
     chatSessionId: workspace.chatSessionId,
     status: workspace.status,
     nodeId: workspace.nodeId,
+    ...(localModel ? { localModel: { baseUrl: localModel.baseUrl } } : {}),
   });
 });
 
