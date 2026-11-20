@@ -300,13 +300,18 @@ async function runUninstall(choice: UninstallChoice): Promise<void> {
 }
 
 if (uninstallChoice) {
-  void runUninstall(uninstallChoice).then(
-    () => app.exit(0),
-    (error: unknown) => {
-      process.stderr.write(`${(error as Error).message}\n`);
-      app.exit(1);
-    }
-  );
+  if (!app.requestSingleInstanceLock()) {
+    process.stderr.write('Close SAM before uninstalling.\n');
+    app.exit(2);
+  } else {
+    void runUninstall(uninstallChoice).then(
+      () => app.exit(0),
+      (error: unknown) => {
+        process.stderr.write(`${(error as Error).message}\n`);
+        app.exit(1);
+      }
+    );
+  }
 } else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
