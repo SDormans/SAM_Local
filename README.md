@@ -1,8 +1,20 @@
+<h1 align="center">Local</h1>
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/images/sam-banner-dark.png" />
     <img src="assets/images/sam-banner.png" alt="SAM, Simple Agent Manager" width="380" />
   </picture>
+</p>
+
+<p align="center">
+  <strong>SAM Local</strong>: this fork runs SAM entirely on your own Windows PC, with local LLM inference.<br />
+  A desktop app (Electron) runs the SAM control plane on <code>127.0.0.1</code>, with no Cloudflare account needed.<br />
+  Projects start from a folder on your PC. Agents run in local Docker Desktop/WSL2 workspaces.<br />
+  OpenCode talks to Ollama through a private, token-scoped model gateway, and nothing is exposed to your network.<br />
+  Each agent's destination is set explicitly to local model or cloud provider, with no silent fallback between them.<br />
+  API keys stay in OS-protected storage, and there's crash recovery and an uninstall that keeps or deletes your data.<br />
+  Hosted SAM works as before. See the <a href="apps/www/src/content/docs/docs/guides/local-desktop.md">Local Desktop guide</a>.
 </p>
 
 <h3 align="center">Run a fleet of coding agents on your own cloud.</h3>
