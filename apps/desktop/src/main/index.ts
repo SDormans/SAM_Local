@@ -15,6 +15,7 @@ import {
   type IpcMainInvokeEvent,
   Menu,
   nativeImage,
+  safeStorage,
   session,
   shell,
   Tray,
@@ -56,6 +57,13 @@ const supervisor = new ServiceSupervisor({
   localDefaultModel: process.env.SAM_LOCAL_DEFAULT_MODEL,
   onOutput: (chunk: string) => process.stdout.write(chunk),
   probePrerequisites: () => probePrerequisites(),
+  secretProtector: {
+    isAvailable: () =>
+      safeStorage.isEncryptionAvailable() &&
+      (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+    encrypt: (plaintext) => safeStorage.encryptString(plaintext),
+    decrypt: (ciphertext) => safeStorage.decryptString(ciphertext),
+  },
   startWorkspaceRuntime:
     process.env.SAM_LOCAL_WORKSPACES === 'off'
       ? undefined

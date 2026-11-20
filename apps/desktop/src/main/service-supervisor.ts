@@ -15,7 +15,11 @@ import {
 } from './local-api-runtime.js';
 import { type InstallationRecord, latestMigrationVersion, LocalDataStore } from './local-data.js';
 import type { LocalPrerequisites } from './prerequisites.js';
-import { loadOrCreateRuntimeSecrets, type LocalRuntimeSecrets } from './runtime-secrets.js';
+import {
+  loadOrCreateRuntimeSecrets,
+  type LocalRuntimeSecrets,
+  type SecretProtector,
+} from './runtime-secrets.js';
 
 export type ServiceState = 'stopped' | 'starting' | 'running' | 'stopping' | 'failed';
 
@@ -54,6 +58,7 @@ export interface ServiceSupervisorOptions {
   webDistDir?: string;
   wranglerBin?: string;
   probePrerequisites: () => Promise<LocalPrerequisites>;
+  secretProtector?: SecretProtector;
   startApi?: (options: LocalApiRuntimeOptions) => Promise<RunningLocalApi>;
   migrate?: typeof applyLocalMigrations;
   fetchImpl?: typeof fetch;
@@ -162,7 +167,10 @@ export class ServiceSupervisor extends EventEmitter {
     let installation: InstallationRecord | undefined;
     try {
       installation = await this.store.init();
-      const secrets = await loadOrCreateRuntimeSecrets(join(this.store.runtimeDir, 'secrets.json'));
+      const secrets = await loadOrCreateRuntimeSecrets(
+        join(this.store.runtimeDir, 'secrets.json'),
+        this.options.secretProtector
+      );
       this.secrets = secrets;
       const runtime: LocalApiRuntimeOptions = {
         apiDir: this.options.apiDir,
