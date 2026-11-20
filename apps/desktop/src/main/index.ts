@@ -23,7 +23,12 @@ import { CLOSE_PROMPT, handleCloseRequest } from './lifecycle.js';
 import { resolveDataDirectory } from './local-data.js';
 import { probePrerequisites } from './prerequisites.js';
 import { isTrustedSender, selectProjectFolder } from './project-dialog.js';
-import { ServiceSupervisor, type SupervisorStatus } from './service-supervisor.js';
+import {
+  type LocalSessionCookie,
+  ServiceSupervisor,
+  sessionRenewalDelayMs,
+  type SupervisorStatus,
+} from './service-supervisor.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../../../..');
@@ -42,6 +47,7 @@ const appOrigin = `http://127.0.0.1:${port}`;
 let mainWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
+let renewalTimer: NodeJS.Timeout | undefined;
 
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
@@ -177,6 +183,31 @@ function createWindow(): BrowserWindow {
   return window;
 }
 
+async function installSessionCookie(cookie: LocalSessionCookie): Promise<void> {
+  await session.defaultSession.cookies.set({
+    url: appOrigin,
+    name: cookie.name,
+    value: cookie.value,
+    httpOnly: true,
+    sameSite: 'strict',
+    expirationDate: Math.floor(cookie.expiresAt / 1000),
+  });
+  scheduleSessionRenewal(cookie.expiresAt);
+}
+
+/** Keeps the renderer signed in for as long as SAM runs; sessions are never renewed by the renderer. */
+function scheduleSessionRenewal(expiresAt: number): void {
+  clearTimeout(renewalTimer);
+  renewalTimer = setTimeout(() => {
+    if (supervisor.status.state !== 'running') return;
+    supervisor
+      .renewSession()
+      .then(installSessionCookie)
+      .catch(() => scheduleSessionRenewal(Date.now()));
+  }, sessionRenewalDelayMs(expiresAt));
+  renewalTimer.unref();
+}
+
 async function launch(): Promise<void> {
   lockDownSession();
   registerIpc();
@@ -191,14 +222,7 @@ async function launch(): Promise<void> {
     await mainWindow.loadURL(statusPage(status));
     return;
   }
-  await session.defaultSession.cookies.set({
-    url: appOrigin,
-    name: cookie.name,
-    value: cookie.value,
-    httpOnly: true,
-    sameSite: 'strict',
-    expirationDate: Math.floor(cookie.expiresAt / 1000),
-  });
+  await installSessionCookie(cookie);
   const prerequisites = supervisor.lastPrerequisites;
   const ready = prerequisites?.dockerDesktop === 'ready' && prerequisites.wsl2 === 'ready';
   await mainWindow.loadURL(`${appOrigin}${ready ? '/projects/new' : '/setup'}`);

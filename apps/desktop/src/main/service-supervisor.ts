@@ -45,6 +45,18 @@ export interface ServiceSupervisorOptions {
   onOutput?: (chunk: string) => void;
 }
 
+const SESSION_RENEW_MARGIN_MS = 10 * 60_000;
+const SESSION_RENEW_MIN_MS = 60_000;
+const MAX_TIMER_MS = 2_147_483_647;
+
+/** How long to wait before renewing a local session that expires at `expiresAt`. */
+export function sessionRenewalDelayMs(expiresAt: number, now: number = Date.now()): number {
+  return Math.min(
+    MAX_TIMER_MS,
+    Math.max(SESSION_RENEW_MIN_MS, expiresAt - now - SESSION_RENEW_MARGIN_MS)
+  );
+}
+
 const ACTIVE_WORKSPACE_STATES = new Set(['pending', 'creating', 'running', 'recovery', 'stopping']);
 
 function parseSessionCookie(setCookie: string | null): LocalSessionCookie {
@@ -155,6 +167,16 @@ export class ServiceSupervisor extends EventEmitter {
       installationId: this.current.installationId,
       error: 'The local SAM service stopped unexpectedly',
     });
+  }
+
+  /** Issues a fresh local session before the current one expires. */
+  async renewSession(): Promise<LocalSessionCookie> {
+    const api = this.api;
+    if (!api || !this.secrets || this.current.state !== 'running') {
+      throw new Error('The local SAM service is not running');
+    }
+    this.sessionCookie = await this.bootstrapSession(api.url, this.secrets);
+    return this.sessionCookie;
   }
 
   private async bootstrapSession(

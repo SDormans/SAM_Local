@@ -8,7 +8,7 @@ import { choiceFromResponse, CLOSE_PROMPT, handleCloseRequest } from '../../src/
 import type { RunningLocalApi } from '../../src/main/local-api-runtime';
 import { probePrerequisites, type RunCommand, runCommand } from '../../src/main/prerequisites';
 import { isTrustedSender, selectProjectFolder } from '../../src/main/project-dialog';
-import { ServiceSupervisor } from '../../src/main/service-supervisor';
+import { ServiceSupervisor, sessionRenewalDelayMs } from '../../src/main/service-supervisor';
 
 const apiDir = resolve(__dirname, '../../../api');
 let root: string;
@@ -298,6 +298,16 @@ describe('ServiceSupervisor', () => {
     expect((await starting).state).toBe((await again).state);
     expect(await stopping).toMatchObject({ state: 'stopped' });
     expect(api.stop).toHaveBeenCalled();
+  });
+
+  it('renews the local session only while running', async () => {
+    const { sup } = supervisor();
+    await expect(sup.renewSession()).rejects.toThrow(/not running/);
+    await sup.start();
+    expect(await sup.renewSession()).toMatchObject({ name: 'sam_local_session', value: COOKIE });
+    expect(sessionRenewalDelayMs(1_000_000, 0)).toBe(1_000_000 - 600_000);
+    expect(sessionRenewalDelayMs(0, 0)).toBe(60_000);
+    expect(sessionRenewalDelayMs(Number.MAX_SAFE_INTEGER, 0)).toBe(2_147_483_647);
   });
 
   it('reports a crash during startup instead of running', async () => {
