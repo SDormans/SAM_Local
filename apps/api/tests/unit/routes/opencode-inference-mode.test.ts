@@ -127,7 +127,12 @@ describe('POST /workspaces/:id/agent-key — OpenCode inference mode', () => {
   const running = [
     { userId: 'user-1', status: 'running', nodeId: 'node-1', nodeStatus: 'running' },
   ];
-  const localEnv = { SAM_RUNTIME_MODE: 'local', LOCAL_DEFAULT_MODEL: 'qwen2.5:0.5b' };
+  const noSavedConnection = { get: async () => null } as unknown as KVNamespace;
+  const localEnv = {
+    SAM_RUNTIME_MODE: 'local',
+    LOCAL_DEFAULT_MODEL: 'qwen2.5:0.5b',
+    KV: noSavedConnection,
+  };
 
   afterEach(() => {
     for (const key of Object.keys(localEnv)) delete (mockEnv as Record<string, unknown>)[key];
@@ -145,7 +150,7 @@ describe('POST /workspaces/:id/agent-key — OpenCode inference mode', () => {
   });
 
   it('fails local mode with an actionable error when no local model is configured', async () => {
-    Object.assign(mockEnv, { SAM_RUNTIME_MODE: 'local' });
+    Object.assign(mockEnv, { SAM_RUNTIME_MODE: 'local', KV: noSavedConnection });
     queueLimitResponses(running, [{ inferenceMode: 'local' }]);
     const resp = await postAgentKey({ agentType: 'opencode' });
     expect(resp.status).toBe(400);

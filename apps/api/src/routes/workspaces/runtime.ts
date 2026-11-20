@@ -24,7 +24,7 @@ import { log } from '../../lib/logger';
 import { parsePositiveInt } from '../../lib/route-helpers';
 import { getCredentialEncryptionKey } from '../../lib/secrets';
 import { ulid } from '../../lib/ulid';
-import { buildLocalOpencodeInferenceConfig } from '../../local/local-inference';
+import { resolveLocalOpencodeInferenceConfig } from '../../local/local-inference';
 import { isLocalRuntime } from '../../local/runtime-mode';
 import { requireApproved, requireAuth } from '../../middleware/auth';
 import { errors } from '../../middleware/error';
@@ -912,7 +912,7 @@ runtimeRoutes.post('/:id/agent-key', jsonValidator(AgentTypeBodySchema), async (
         )[0]?.inferenceMode ?? null)
       : null;
   if (inferenceMode === 'local') {
-    const selectedLocal = buildLocalOpencodeInferenceConfig(c.env);
+    const selectedLocal = await resolveLocalOpencodeInferenceConfig(c.env);
     if (!selectedLocal) {
       throw errors.badRequest(
         'OpenCode is set to use a local model, but no local model is configured. Choose a model in SAM settings, or switch OpenCode to cloud.'
@@ -1005,7 +1005,7 @@ runtimeRoutes.post('/:id/agent-key', jsonValidator(AgentTypeBodySchema), async (
 
   const localInference =
     !credentialData && opencodeRequiresDedicatedCredential && inferenceMode !== 'cloud'
-      ? buildLocalOpencodeInferenceConfig(c.env)
+      ? await resolveLocalOpencodeInferenceConfig(c.env)
       : null;
   if (localInference) {
     log.info('agent_key.local_model_gateway', { workspaceId, model: localInference.model });
