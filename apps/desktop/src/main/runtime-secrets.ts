@@ -3,7 +3,7 @@
  * bootstrap secret used to mint local sessions). Provider credentials are NOT stored here.
  */
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 
 export interface LocalRuntimeSecrets {
   ENCRYPTION_KEY: string;
@@ -108,7 +108,9 @@ export async function loadOrCreateRuntimeSecrets(
   }
   if (!wasProtected && protector?.isAvailable()) {
     // Upgrade an owner-only plaintext file from an earlier version to protected storage.
-    await writeFile(path, serialize(existing, protector), { mode: 0o600 });
+    // Write-then-rename so an interrupted upgrade leaves the original file intact.
+    await writeFile(`${path}.tmp`, serialize(existing, protector), { mode: 0o600 });
+    await rename(`${path}.tmp`, path);
   }
   return existing;
 }
