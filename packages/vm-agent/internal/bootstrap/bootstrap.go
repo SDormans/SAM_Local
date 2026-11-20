@@ -784,6 +784,11 @@ func ensureRepositoryReady(ctx context.Context, cfg *config.Config, state *boots
 		slog.Info("Repository is empty, skipping clone step")
 		return nil
 	}
+	if strings.EqualFold(strings.TrimSpace(cfg.RepoProvider), "local") {
+		// Spec 036: local-desktop folders are bind-mounted in place, never cloned.
+		slog.Info("Local folder repository, skipping clone step", "repository", cfg.Repository)
+		return nil
+	}
 
 	branch := cfg.Branch
 	if branch == "" {
@@ -1751,7 +1756,11 @@ func writeMountOverrideConfig(ctx context.Context, cfg *config.Config, volumeNam
 	}
 
 	normalizeMergedLifecycleCommands(readResult.MergedConfiguration)
-	readResult.MergedConfiguration["workspaceMount"] = fmt.Sprintf("source=%s,target=/workspaces,type=volume", volumeName)
+	if strings.EqualFold(strings.TrimSpace(cfg.RepoProvider), "local") {
+		readResult.MergedConfiguration["workspaceMount"] = fmt.Sprintf("source=%s,target=/workspaces/%s,type=bind", cfg.Repository, filepath.Base(cfg.Repository))
+	} else {
+		readResult.MergedConfiguration["workspaceMount"] = fmt.Sprintf("source=%s,target=/workspaces,type=volume", volumeName)
+	}
 	readResult.MergedConfiguration["workspaceFolder"] = fmt.Sprintf("/workspaces/%s", repoDirName)
 
 	// Add credential helper mount and containerEnv if a host path is provided.

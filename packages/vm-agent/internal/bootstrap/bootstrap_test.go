@@ -1596,6 +1596,75 @@ exit 1
 	}
 }
 
+func TestWriteMountOverrideConfigBindsLocalFolder(t *testing.T) {
+	mockBinDir := t.TempDir()
+	mockDevcontainer := filepath.Join(mockBinDir, "devcontainer")
+	mockScript := `#!/bin/sh
+if [ "$1" = "read-configuration" ]; then
+  echo '[trace] resolving features...'
+  cat <<'EOF'
+{
+  "outcome": "success",
+  "mergedConfiguration": {
+    "name": "Repo Config",
+    "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
+    "postCreateCommands": [
+      "bash .devcontainer/post-create.sh"
+    ],
+    "postStartCommands": [
+      "bash .devcontainer/post-start.sh"
+    ],
+    "features": {
+      "ghcr.io/devcontainers/features/go:1": {
+        "version": "1.22"
+      }
+    }
+  }
+}
+EOF
+  exit 0
+fi
+echo "unexpected devcontainer command: $@" >&2
+exit 1
+`
+	if err := os.WriteFile(mockDevcontainer, []byte(mockScript), 0o755); err != nil {
+		t.Fatalf("failed to write mock devcontainer command: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", mockBinDir+":"+origPath)
+
+	cfg := &config.Config{
+		WorkspaceDir: "/workspace/demo",
+		Repository:   "/run/desktop/mnt/host/c/code/demo",
+		RepoProvider: "local",
+	}
+
+	path, err := writeMountOverrideConfig(context.Background(), cfg, "sam-ws-abc123", "", "", "")
+	if err != nil {
+		t.Fatalf("writeMountOverrideConfig returned error: %v", err)
+	}
+	defer os.Remove(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read mount override config: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"workspaceMount": "source=/run/desktop/mnt/host/c/code/demo,target=/workspaces/demo,type=bind"`) {
+		t.Fatalf("expected local bind workspaceMount, got:\n%s", content)
+	}
+	if strings.Contains(content, "type=volume") {
+		t.Fatalf("local folders must not use the workspace volume, got:\n%s", content)
+	}
+}
+
+func TestEnsureRepositoryReadySkipsCloneForLocalFolder(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	cfg := &config.Config{Repository: "/home/me/demo", RepoProvider: "local", Branch: "main"}
+	if err := ensureRepositoryReady(context.Background(), cfg, nil, "sam-ws-abc123"); err != nil {
+		t.Fatalf("expected local folder to skip clone, got %v", err)
+	}
+}
+
 func TestWriteMountOverrideConfigRequiresRuntimeSource(t *testing.T) {
 	mockBinDir := t.TempDir()
 	mockDevcontainer := filepath.Join(mockBinDir, "devcontainer")
