@@ -65,3 +65,31 @@ SAM_FEASIBILITY_DIND_IMAGE=docker:27-dind pnpm test:feasibility
 - A privileged `docker:27-dind` workspace on the same network (the supported nested-Docker shape) reaches the gateway, with no Docker API port published on the host.
 
 Windows differences to verify: Docker Desktop routes `host-gateway`/`host.docker.internal` to the Windows host loopback, so the gateway should bind `127.0.0.1` there. Check that workspaces reach it through `--add-host sam-model-gateway:host-gateway`, that Ollama stays on `127.0.0.1`, and that a second LAN device cannot reach the gateway, the control port or Ollama. On Docker Desktop, workspaces can probably also reach other host-loopback services (including Ollama) directly through `host.docker.internal`. Record whether that holds; it is not LAN exposure, but it does mean the gateway is the credential boundary rather than a network boundary.
+
+## Foundational Local Runtime Evidence (Linux, 2026-11-20)
+
+Same VM as above. Build the API's workspace dependencies first:
+
+```bash
+pnpm turbo run build --filter=@simple-agent-manager/api^...
+pnpm --filter @simple-agent-manager/desktop test:coverage   # 42 tests; 93.8% statements, 89.7% branches, 92.6% functions, 95.3% lines
+pnpm --filter @simple-agent-manager/desktop test:runtime    # 5 tests; real apps/api under workerd
+cd apps/api && pnpm exec vitest run tests/unit/local-mode tests/unit/middleware
+```
+
+`test:runtime` starts the real `apps/api` Worker from the generated local config. It is an app-owned data directory with no Cloudflare credentials in the child environment. The test proves:
+
+- The full D1 migration chain applies through `LocalDataStore.upgrade`, which records the schema version and writes a backup first.
+- `/health` serves on `127.0.0.1`. A request with `Host: attacker.example` (DNS rebinding) gets `403 LOCAL_HOST_REJECTED`.
+- `POST /api/local/session` issues an HttpOnly, `SameSite=Strict` `sam_local_session` cookie, but only to a caller holding the per-installation bootstrap secret.
+- Requests to `/api/projects` get 401 when they carry a forged local cookie, a BetterAuth cookie, an `x-user-id` header, or a bearer token.
+- Another user's project does not appear in the local principal's list, and a direct request for it returns 404.
+- The principal and session survive a full runtime restart; `DELETE /api/local/session` revokes the session.
+
+Unit tests cover the rest:
+
+- **Data store:** restore after a failed migration; disk-full before and during an upgrade, with the prior data kept and no partial backup left; backup pruning.
+- **Supervisor:** loopback binding, credential stripping, port-in-use, early exit and readiness timeout, process-group stop.
+- **Runtime boundary and local sessions:** the outbound guard, Workers AI poisoning, and Host parsing; local sessions store only a token hash and reject expired, revoked, cross-installation and malformed sessions.
+
+**Known limitation (to resolve with T002 on Windows):** the generated `.dev.vars` and `runtime/secrets.json` are owner-only files (`0600`) in the per-user data directory. They are not yet encrypted with Electron `safeStorage`. They hold installation signing, encryption and bootstrap secrets, never provider credentials.

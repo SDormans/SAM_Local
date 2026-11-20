@@ -169,6 +169,12 @@ function bearerToken(req: IncomingMessage): string | null {
   return match?.[1] ?? null;
 }
 
+function isChatCompletionRequest(value: unknown): value is { model: string; messages: unknown[] } {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.model === 'string' && Array.isArray(record.messages);
+}
+
 function tooLarge(): GatewayError {
   return new GatewayError(413, 'request_too_large', 'Request body is too large');
 }
@@ -352,13 +358,13 @@ export async function startModelGateway(
     }
 
     const body = await readBody(req, maxBody);
-    let parsed: { model?: unknown; messages?: unknown };
+    let parsed: unknown;
     try {
-      parsed = JSON.parse(body.toString('utf8')) as typeof parsed;
+      parsed = JSON.parse(body.toString('utf8'));
     } catch {
       throw new GatewayError(400, 'invalid_request', 'Request body must be JSON');
     }
-    if (typeof parsed?.model !== 'string' || !Array.isArray(parsed.messages)) {
+    if (!isChatCompletionRequest(parsed)) {
       throw new GatewayError(
         400,
         'invalid_request',

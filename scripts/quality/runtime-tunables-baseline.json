@@ -1356,6 +1356,10 @@
     "WWW_PAGES_PROJECT_NAME"
   ],
   "bootstrapExceptions": {
-    "AGENT_EMAIL_WORKER_NAME": "Deploy-generated name of this Worker's own script, emitted by scripts/deploy/sync-wrangler-config.ts only together with the AGENT_EMAIL send binding. The agent email admin setup points the Email Routing rule at it, so it must not be admin-editable: another value would route agent mail to a different Worker."
+    "AGENT_EMAIL_WORKER_NAME": "Deploy-generated name of this Worker's own script, emitted by scripts/deploy/sync-wrangler-config.ts only together with the AGENT_EMAIL send binding. The agent email admin setup points the Email Routing rule at it, so it must not be admin-editable: another value would route agent mail to a different Worker.",
+    "SAM_RUNTIME_MODE": "Spec 036 runtime selector written only by the desktop-generated local wrangler config. It decides which identity and cloud-binding boundary applies before D1 is trusted, so it cannot live in admin settings; hosted deployments leave it unset.",
+    "LOCAL_INSTALLATION_ID": "Spec 036 identity of the local data directory, generated once by the desktop supervisor and bound to the local principal. Admin-editable values would let the principal identity drift.",
+    "LOCAL_BOOTSTRAP_SECRET": "Spec 036 per-installation secret held by the desktop supervisor to mint the local session; secrets are never admin settings.",
+    "LOCAL_SESSION_TTL_SECONDS": "Spec 036 local session lifetime, read before any session exists to bootstrap it; the desktop supervisor sets it in the local runtime config."
   }
 }
