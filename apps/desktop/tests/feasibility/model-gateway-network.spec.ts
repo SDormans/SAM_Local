@@ -108,6 +108,7 @@ beforeAll(async () => {
   token = tokens.issue('ws-feasibility', 'conn-ollama', 10 * 60 * 1000).token;
   gateway = await startModelGateway({
     host: gatewayIp,
+    privateNetworkHosts: [gatewayIp],
     tokens,
     resolveUpstream: async (connectionId) =>
       connectionId === 'conn-ollama'

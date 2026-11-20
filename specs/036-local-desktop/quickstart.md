@@ -59,7 +59,7 @@ SAM_FEASIBILITY_DIND_IMAGE=docker:27-dind pnpm test:feasibility
 `tests/feasibility/model-gateway-network.spec.ts` (7 tests) proves:
 
 - Ollama listens on `127.0.0.1:11434` only; it is not reachable on LAN-facing or Docker-network addresses.
-- The SAM gateway (`apps/desktop/src/main/model-gateway.ts`) refuses wildcard binds and listens only on the SAM Docker network gateway address.
+- The SAM gateway (`apps/desktop/src/main/model-gateway.ts`) binds only to loopback or an explicitly verified private-network address (here, the SAM Docker network gateway).
 - A workspace container on that network, using `--add-host sam-model-gateway:<gateway-ip>`, lists the scoped model and receives a streamed (SSE) completion from Ollama through the gateway with a workspace-scoped `samgw_` token.
 - Requests without a valid token get 401; the workspace cannot reach Ollama directly; the gateway port is not reachable on LAN-facing addresses or loopback.
 - A privileged `docker:27-dind` workspace on the same network (the supported nested-Docker shape) reaches the gateway, with no Docker API port published on the host.

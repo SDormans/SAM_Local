@@ -148,16 +148,30 @@ describe('GatewayTokenStore', () => {
 });
 
 describe('model gateway', () => {
-  it('refuses wildcard bind addresses', async () => {
-    expect(() => assertPrivateBindHost('0.0.0.0')).toThrow(/wildcard/);
-    expect(() => assertPrivateBindHost('::')).toThrow(/wildcard/);
+  it('binds only loopback or explicitly verified private network addresses', async () => {
+    for (const host of [
+      '0.0.0.0',
+      '::',
+      '[::]',
+      '0',
+      '',
+      'localhost',
+      '192.168.1.20',
+      '10.0.0.5',
+    ]) {
+      expect(() => assertPrivateBindHost(host), host).toThrow(/Refusing to bind/);
+    }
+    expect(() => assertPrivateBindHost('127.0.0.1')).not.toThrow();
+    expect(() => assertPrivateBindHost('::1')).not.toThrow();
+    expect(() => assertPrivateBindHost('172.18.0.1', ['172.18.0.1'])).not.toThrow();
+    expect(() => assertPrivateBindHost('192.168.1.20', ['172.18.0.1'])).toThrow();
     await expect(
       startModelGateway({
-        host: '0.0.0.0',
+        host: '0',
         tokens: new GatewayTokenStore(),
         resolveUpstream: async () => null,
       })
-    ).rejects.toThrow(/wildcard/);
+    ).rejects.toThrow(/Refusing to bind/);
   });
 
   it('requires a valid token and never contacts the upstream otherwise', async () => {
@@ -282,6 +296,22 @@ describe('model gateway', () => {
       body: 'x'.repeat(200),
     });
     expect(big.status).toBe(413);
+    const chunks = ['x'.repeat(80), 'y'.repeat(80), 'z'.repeat(80)];
+    const chunked = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: auth,
+      body: new ReadableStream({
+        pull(controller) {
+          const next = chunks.shift();
+          if (next) controller.enqueue(new TextEncoder().encode(next));
+          else controller.close();
+        },
+      }),
+      duplex: 'half',
+    } as RequestInit);
+    expect(chunked.status).toBe(413);
+    expect((await chunked.json()).error).toBe('request_too_large');
+    expect(calls).toHaveLength(0);
   });
 
   it('only exposes the two contract routes and methods', async () => {
@@ -364,6 +394,81 @@ describe('model gateway', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.status).toBe(502);
+  });
+
+  it('reports a model list without a data array as incompatible', async () => {
+    const tokens = new GatewayTokenStore();
+    const { token } = tokens.issue('ws', 'conn');
+    gateway = await startModelGateway({
+      host: '127.0.0.1',
+      tokens,
+      resolveUpstream: async (connectionId) => ({ connectionId, baseUrl: upstreamUrl }),
+      fetchImpl: async () => Response.json({ models: [] }),
+    });
+    const res = await fetch(`http://127.0.0.1:${gateway.port}/local-model/v1/models`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toBe('local_model_incompatible');
+  });
+
+  it('redacts the upstream credential from upstream error text and bounds its length', async () => {
+    const tokens = new GatewayTokenStore();
+    const { token } = tokens.issue('ws', 'conn');
+    gateway = await startModelGateway({
+      host: '127.0.0.1',
+      tokens,
+      maxUpstreamErrorChars: 60,
+      resolveUpstream: async (connectionId) => ({
+        connectionId,
+        baseUrl: upstreamUrl,
+        authorization: 'Bearer sk-upstream-secret',
+      }),
+      fetchImpl: async () =>
+        new Response(
+          'invalid key sk-upstream-secret (Bearer sk-upstream-secret) ' + 'x'.repeat(200),
+          {
+            status: 401,
+          }
+        ),
+    });
+    const res = await fetch(`http://127.0.0.1:${gateway.port}/local-model/v1/models`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const body = await res.json();
+    expect(body.message).not.toContain('sk-upstream-secret');
+    expect(body.message).toContain('[redacted]');
+    expect(body.message).not.toContain('x'.repeat(61));
+  });
+
+  it('aborts the upstream request when the client disconnects before headers', async () => {
+    const tokens = new GatewayTokenStore();
+    const { token } = tokens.issue('ws', 'conn');
+    let upstreamSignal: AbortSignal | undefined;
+    let started!: () => void;
+    const fetchStarted = new Promise<void>((r) => (started = r));
+    gateway = await startModelGateway({
+      host: '127.0.0.1',
+      tokens,
+      resolveUpstream: async (connectionId) => ({ connectionId, baseUrl: upstreamUrl }),
+      fetchImpl: (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          upstreamSignal = init?.signal ?? undefined;
+          upstreamSignal?.addEventListener('abort', () => reject(new Error('aborted')));
+          started();
+        }),
+    });
+    const client = new AbortController();
+    const pending = fetch(`http://127.0.0.1:${gateway.port}/local-model/v1/chat/completions`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body: JSON.stringify({ model: 'qwen', messages: [] }),
+      signal: client.signal,
+    }).catch(() => undefined);
+    await fetchStarted;
+    client.abort();
+    await pending;
+    await expect.poll(() => upstreamSignal?.aborted).toBe(true);
   });
 
   it('rejects an upstream whose connection does not match the token grant', async () => {

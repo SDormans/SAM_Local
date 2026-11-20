@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { type AddressInfo, isIP } from 'node:net';
 import { Readable } from 'node:stream';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 
@@ -95,13 +95,19 @@ export interface GatewayLogEvent {
 }
 
 export interface ModelGatewayOptions {
-  /** Interface to bind. Must be a private/loopback address; never `0.0.0.0`. */
+  /** IP literal to bind: loopback, or an address listed in `privateNetworkHosts`. */
   host: string;
+  /**
+   * Non-loopback addresses the trusted caller has verified belong to the private SAM workspace
+   * network (for example the SAM Docker network gateway). LAN-facing addresses must never be listed.
+   */
+  privateNetworkHosts?: readonly string[];
   port?: number;
   tokens: GatewayTokenStore;
   resolveUpstream: (connectionId: string) => Promise<LocalModelUpstream | null>;
   upstreamHeadersTimeoutMs?: number;
   maxRequestBodyBytes?: number;
+  maxUpstreamErrorChars?: number;
   log?: (event: GatewayLogEvent) => void;
   fetchImpl?: typeof fetch;
 }
@@ -122,14 +128,21 @@ class GatewayError extends Error {
   }
 }
 
-const WILDCARD_HOSTS = new Set(['0.0.0.0', '::', '[::]', '']);
+function isLoopback(host: string): boolean {
+  return (isIP(host) === 4 && host.startsWith('127.')) || host === '::1';
+}
 
-export function assertPrivateBindHost(host: string): void {
-  if (WILDCARD_HOSTS.has(host.trim())) {
-    throw new Error(
-      `Refusing to bind the model gateway to wildcard address "${host}"; use loopback or the private workspace network address`
-    );
+export function assertPrivateBindHost(
+  host: string,
+  privateNetworkHosts: readonly string[] = []
+): void {
+  if (isIP(host) === 0) {
+    throw new Error(`Refusing to bind the model gateway to "${host}"; an IP literal is required`);
   }
+  if (isLoopback(host) || privateNetworkHosts.includes(host)) return;
+  throw new Error(
+    `Refusing to bind the model gateway to "${host}"; use loopback or a verified private workspace network address`
+  );
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -149,19 +162,29 @@ function bearerToken(req: IncomingMessage): string | null {
   return match?.[1] ?? null;
 }
 
-async function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
-  const declared = Number(req.headers['content-length'] ?? '0');
-  if (declared > limit)
-    throw new GatewayError(413, 'request_too_large', 'Request body is too large');
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    const buf = chunk as Buffer;
-    size += buf.length;
-    if (size > limit) throw new GatewayError(413, 'request_too_large', 'Request body is too large');
-    chunks.push(buf);
-  }
-  return Buffer.concat(chunks);
+function tooLarge(): GatewayError {
+  return new GatewayError(413, 'request_too_large', 'Request body is too large');
+}
+
+/** Reads at most `limit` bytes; an oversized body is drained (not destroyed) so the 413 can be sent. */
+function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let exceeded = Number(req.headers['content-length'] ?? '0') > limit;
+    req.on('data', (chunk: Buffer) => {
+      if (exceeded) return;
+      size += chunk.length;
+      if (size > limit) {
+        exceeded = true;
+        chunks.length = 0;
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => (exceeded ? reject(tooLarge()) : resolve(Buffer.concat(chunks))));
+    req.on('error', reject);
+  });
 }
 
 function unavailable(): GatewayError {
@@ -172,14 +195,23 @@ function unavailable(): GatewayError {
   );
 }
 
-function sanitizeUpstreamMessage(text: string): string {
-  return text.replace(/\s+/g, ' ').slice(0, MODEL_GATEWAY_DEFAULTS.maxUpstreamErrorChars);
+function sanitizeUpstreamMessage(text: string, maxChars: number, authorization?: string): string {
+  let out = text;
+  if (authorization) {
+    const secrets = [authorization, authorization.replace(/^\S+\s+/, '')].filter(
+      (v) => v.length >= 4
+    );
+    for (const secret of secrets) out = out.split(secret).join('[redacted]');
+  }
+  return out.replace(/\s+/g, ' ').slice(0, maxChars);
 }
 
 export async function startModelGateway(
   options: ModelGatewayOptions
 ): Promise<RunningModelGateway> {
-  assertPrivateBindHost(options.host);
+  assertPrivateBindHost(options.host, options.privateNetworkHosts);
+  const maxErrorChars =
+    options.maxUpstreamErrorChars ?? MODEL_GATEWAY_DEFAULTS.maxUpstreamErrorChars;
   const headersTimeoutMs =
     options.upstreamHeadersTimeoutMs ?? MODEL_GATEWAY_DEFAULTS.upstreamHeadersTimeoutMs;
   const maxBody = options.maxRequestBodyBytes ?? MODEL_GATEWAY_DEFAULTS.maxRequestBodyBytes;
@@ -194,6 +226,9 @@ export async function startModelGateway(
     transformJson?: (body: unknown) => unknown
   ): Promise<number> {
     const controller = new AbortController();
+    res.on('close', () => {
+      if (!res.writableFinished) controller.abort();
+    });
     const timer = setTimeout(() => controller.abort(), headersTimeoutMs);
     const headers: Record<string, string> = { accept: 'application/json, text/event-stream' };
     if (init.body) headers['content-type'] = 'application/json';
@@ -213,7 +248,11 @@ export async function startModelGateway(
       clearTimeout(timer);
     }
     if (!response.ok) {
-      const text = sanitizeUpstreamMessage(await response.text().catch(() => ''));
+      const text = sanitizeUpstreamMessage(
+        await response.text().catch(() => ''),
+        maxErrorChars,
+        upstream.authorization
+      );
       throw new GatewayError(
         502,
         'local_model_incompatible',
@@ -287,9 +326,15 @@ export async function startModelGateway(
         connectionId: grant.connectionId,
       });
       return forward(res, upstream, 'v1/models', { method: 'GET' }, (json) => {
-        const data = Array.isArray((json as { data?: unknown }).data)
-          ? (json as { data: Array<{ id?: unknown }> }).data
-          : [];
+        const raw = (json as { data?: unknown } | null)?.data;
+        if (!Array.isArray(raw)) {
+          throw new GatewayError(
+            502,
+            'local_model_incompatible',
+            'The local model service did not return an OpenAI-compatible model list'
+          );
+        }
+        const data = raw as Array<{ id?: unknown }>;
         return {
           object: 'list',
           data: allowed
