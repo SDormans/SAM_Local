@@ -44,4 +44,16 @@ describe('uninstall', () => {
     expect(result.containers).toEqual({ skipped: 'Docker Desktop is not running' });
     await expect(stat(dir)).rejects.toThrow();
   });
+
+  it('delete keeps files SAM did not create in the data directory', async () => {
+    const dir = await dataDir();
+    await writeFile(join(dir, 'notes.txt'), 'mine');
+    await performUninstall({
+      choice: 'delete',
+      dataDir: dir,
+      removeContainers: async () => report,
+    });
+    await expect(stat(join(dir, 'notes.txt'))).resolves.toBeTruthy();
+    await expect(stat(join(dir, 'installation.json'))).rejects.toThrow();
+  });
 });

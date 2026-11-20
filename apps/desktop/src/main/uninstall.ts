@@ -4,9 +4,13 @@
  * this installation created are always removed; projects, conversations and settings are
  * deleted only for an explicit `delete`. Project folders on disk are never touched.
  */
-import { rm } from 'node:fs/promises';
+import { readdir, rm, rmdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import type { CleanupReport } from './workspaces/docker-desktop.js';
+
+/** Entries SAM creates in its data directory; nothing else there is deleted. */
+const SAM_DATA_ENTRIES = ['installation.json', 'state', 'backups', 'runtime'];
 
 export type UninstallChoice = 'retain' | 'delete';
 
@@ -35,6 +39,10 @@ export async function performUninstall(options: {
     skipped: error instanceof Error ? error.message : 'Docker is not available',
   }));
   if (options.choice === 'retain') return { choice: 'retain', containers, dataDeleted: false };
-  await rm(options.dataDir, { recursive: true, force: true });
+  for (const entry of SAM_DATA_ENTRIES) {
+    await rm(join(options.dataDir, entry), { recursive: true, force: true });
+  }
+  const left = await readdir(options.dataDir).catch(() => null);
+  if (left && left.length === 0) await rmdir(options.dataDir);
   return { choice: 'delete', containers, dataDeleted: true };
 }
