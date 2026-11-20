@@ -3868,3 +3868,36 @@ func TestEnsureWorkspaceOwnershipLeavesLocalFoldersAlone(t *testing.T) {
 		t.Fatalf("ensureWorkspaceOwnership = %v, want nil without touching docker", err)
 	}
 }
+
+func TestDefaultDevcontainerConfigLocalFolderWithSpacesAndQuotes(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), `My "Project"`)
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		RepoProvider:                  "local",
+		Repository:                    folder,
+		WorkspaceDir:                  folder,
+		WorkspaceID:                   "ws1",
+		DefaultDevcontainerConfigPath: filepath.Join(t.TempDir(), "default.json"),
+	}
+	path, err := writeDefaultDevcontainerConfigForMode(cfg, "", "", false)
+	if err != nil {
+		t.Fatalf("writeDefaultDevcontainerConfigForMode: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		t.Fatalf("default config is not valid JSON: %v\n%s", err, raw)
+	}
+	want := "/workspaces/" + config.DeriveRepoDirName(folder)
+	if parsed["workspaceFolder"] != want {
+		t.Fatalf("workspaceFolder = %v, want %s", parsed["workspaceFolder"], want)
+	}
+	if mount, _ := parsed["workspaceMount"].(string); !strings.Contains(mount, "target="+want+",") {
+		t.Fatalf("workspaceMount = %q, want target %s", mount, want)
+	}
+}

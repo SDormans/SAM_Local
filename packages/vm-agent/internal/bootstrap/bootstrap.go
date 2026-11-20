@@ -1773,7 +1773,7 @@ func writeMountOverrideConfig(ctx context.Context, cfg *config.Config, volumeNam
 
 	normalizeMergedLifecycleCommands(readResult.MergedConfiguration)
 	if isLocalRepoProvider(cfg.RepoProvider) {
-		readResult.MergedConfiguration["workspaceMount"] = fmt.Sprintf("source=%s,target=/workspaces/%s,type=bind", cfg.Repository, filepath.Base(cfg.Repository))
+		readResult.MergedConfiguration["workspaceMount"] = localWorkspaceMount(cfg.Repository, repoDirName)
 	} else {
 		readResult.MergedConfiguration["workspaceMount"] = fmt.Sprintf("source=%s,target=/workspaces,type=volume", volumeName)
 	}
@@ -1947,7 +1947,10 @@ func writeDefaultDevcontainerConfigForMode(cfg *config.Config, volumeName, credH
 	mountLines := ""
 	if isLocalRepoProvider(cfg.RepoProvider) {
 		// Spec 036: bind the user's folder in place instead of the workspace volume.
-		mountLines = fmt.Sprintf(",\n  \"workspaceMount\": \"source=%s,target=/workspaces/%s,type=bind\",\n  \"workspaceFolder\": \"/workspaces/%s\"", cfg.Repository, filepath.Base(cfg.Repository), filepath.Base(cfg.Repository))
+		repoDirName := config.DeriveRepoDirName(cfg.Repository)
+		mount, _ := json.Marshal(localWorkspaceMount(cfg.Repository, repoDirName))
+		folder, _ := json.Marshal("/workspaces/" + repoDirName)
+		mountLines = fmt.Sprintf(",\n  \"workspaceMount\": %s,\n  \"workspaceFolder\": %s", mount, folder)
 	} else if volumeName != "" {
 		repoDirName := config.DeriveRepoDirName(cfg.Repository)
 		if repoDirName == "" {
@@ -3336,6 +3339,12 @@ func saveState(path string, state *bootstrapState) error {
 	}
 
 	return os.WriteFile(path, encoded, 0o600)
+}
+
+// localWorkspaceMount binds a local desktop folder at the same /workspaces/<name> the rest of the
+// agent derives from the repository (config.DeriveRepoDirName), so hooks and commands agree.
+func localWorkspaceMount(folder, repoDirName string) string {
+	return fmt.Sprintf("source=%s,target=/workspaces/%s,type=bind", folder, repoDirName)
 }
 
 // isLocalRepoProvider reports spec 036 local-desktop folders, which are used in place.
