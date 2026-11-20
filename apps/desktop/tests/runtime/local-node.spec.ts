@@ -47,6 +47,7 @@ let node: LocalNode | undefined;
 let nodeId = '';
 let sessionCookie = '';
 let localProjectId = '';
+let demoWorkspaceId = '';
 let localNodeId = '';
 
 describe.runIf(imageAvailable())('local node agent', () => {
@@ -145,6 +146,7 @@ describe.runIf(imageAvailable())('local node agent', () => {
     const createdBody = await created.text();
     expect(created.status, createdBody).toBeLessThan(300);
     const workspaceId = JSON.parse(createdBody).id as string;
+    demoWorkspaceId = workspaceId;
 
     let ws: { status?: string; errorMessage?: string | null } = {};
     for (let i = 0; i < 150; i++) {
@@ -213,4 +215,78 @@ describe.runIf(imageAvailable())('local node agent', () => {
     expect(loaded, JSON.stringify(ps)).toBeDefined();
     expect(Date.parse(loaded!.expires_at)).toBeGreaterThan(submittedAt);
   });
+
+  it('runs Docker inside a repository devcontainer that asks for it (nested Docker)', async () => {
+    // Free the first workspace's reservation: each local workspace reserves disk on this host.
+    const headersDel = { cookie: sessionCookie };
+    const deleted = await fetch(`${api!.url}/api/workspaces/${demoWorkspaceId}`, {
+      method: 'DELETE',
+      headers: headersDel,
+    });
+    expect(deleted.status, await deleted.text()).toBeLessThan(300);
+    for (let i = 0; i < 60; i++) {
+      const res = await fetch(`${api!.url}/api/workspaces/${demoWorkspaceId}`, {
+        headers: headersDel,
+      });
+      if (res.status === 404 || ['deleted', 'stopped'].includes((await res.json()).status)) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    const folder = join(root, 'nested');
+    await mkdir(join(folder, '.devcontainer'), { recursive: true });
+    await writeFile(
+      join(folder, '.devcontainer', 'devcontainer.json'),
+      JSON.stringify({
+        image: 'mcr.microsoft.com/devcontainers/base:ubuntu',
+        features: { 'ghcr.io/devcontainers/features/docker-in-docker:2': { moby: false } },
+      })
+    );
+    const headers = { cookie: sessionCookie, 'content-type': 'application/json' };
+    const project = await fetch(`${api!.url}/api/projects`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'nested', repoProvider: 'local', localPath: folder }),
+    });
+    expect(project.status).toBe(201);
+    const { id: projectId } = await project.json();
+    const created = await fetch(`${api!.url}/api/workspaces`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'nested-ws', projectId, nodeId }),
+    });
+    const createdBody = await created.text();
+    expect(created.status, createdBody).toBeLessThan(300);
+    const workspaceId = JSON.parse(createdBody).id as string;
+
+    let ws: { status?: string; errorMessage?: string | null } = {};
+    for (let i = 0; i < 300; i++) {
+      const res = await fetch(`${api!.url}/api/workspaces/${workspaceId}`, { headers });
+      if (res.ok) ws = await res.json();
+      if (['running', 'error', 'recovery'].includes(ws.status ?? '')) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    const nestedLogs =
+      ws.status === 'running'
+        ? ''
+        : execFileSync('sh', [
+            '-c',
+            `docker logs $(docker ps -aq --filter label=sam.role=node | head -1) 2>&1 | grep -iE "error|fail|devcontainer" | tail -25`,
+          ]).toString();
+    expect(ws.status, nestedLogs).toBe('running');
+    const container = execFileSync('docker', [
+      'ps',
+      '-q',
+      '--filter',
+      `label=sam.workspace=${workspaceId}`,
+    ])
+      .toString()
+      .trim()
+      .split('\n')[0]!;
+    expect(container).not.toBe('');
+    const out = execFileSync(
+      'docker',
+      ['exec', container, 'sh', '-c', 'docker run --rm alpine echo nested-ok'],
+      { timeout: 300_000 }
+    ).toString();
+    expect(out).toContain('nested-ok');
+  }, 900_000);
 });
