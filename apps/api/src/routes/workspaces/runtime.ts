@@ -1572,7 +1572,8 @@ runtimeRoutes.get('/:id/runtime', async (c) => {
     chatSessionId: workspace.chatSessionId,
     status: workspace.status,
     nodeId: workspace.nodeId,
-    ...(localModel ? { localModel: { baseUrl: localModel.baseUrl } } : {}),
+    // The gateway adds the /v1 API prefix itself.
+    ...(localModel ? { localModel: { baseUrl: localModel.baseUrl.replace(/\/v1\/?$/, '') } } : {}),
   });
 });
 
