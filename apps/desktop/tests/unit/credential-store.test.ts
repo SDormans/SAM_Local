@@ -21,10 +21,21 @@ const SECRET = 'b'.repeat(43);
 
 async function store() {
   const path = join(await mkdtemp(join(tmpdir(), 'sam-creds-')), 'credentials.json');
-  return { path, store: new CredentialStore(path, protector) };
+  return { path, store: new CredentialStore(path, protector, false) };
 }
 
 describe('desktop credential store', () => {
+  it('refuses to save without OS protection and keeps concurrent saves', async () => {
+    const path = join(await mkdtemp(join(tmpdir(), 'sam-creds-')), 'c.json');
+    await expect(
+      new CredentialStore(path, { ...protector, isAvailable: () => false }, false).put('x')
+    ).rejects.toThrow(/not saved/);
+    const s = new CredentialStore(path, protector, false);
+    const refs = await Promise.all(['a', 'b', 'c'].map((v) => s.put(v)));
+    expect((await s.list()).sort()).toEqual([...refs].sort());
+    expect(await s.list(60_000)).toEqual([]);
+  });
+
   let broker: RunningCredentialBroker | undefined;
   afterEach(async () => {
     await broker?.stop();

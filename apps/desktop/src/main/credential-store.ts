@@ -14,20 +14,35 @@ import type { SecretProtector } from './runtime-secrets.js';
 interface StoredEntry {
   sealed: string;
   protected: boolean;
+  createdAt?: number;
 }
 
 const MAX_BODY_BYTES = 256 * 1024;
 const REF_PATTERN = /^[0-9a-f-]{36}$/;
 
 export class CredentialStore {
+  private queue: Promise<unknown> = Promise.resolve();
+
   constructor(
     private readonly path: string,
-    private readonly protector?: SecretProtector
+    private readonly protector?: SecretProtector,
+    private readonly allowUnprotected = process.env.SAM_ALLOW_UNPROTECTED_CREDENTIALS === '1'
   ) {}
+
+  /** Serializes read-modify-write cycles so concurrent saves cannot drop each other. */
+  private exclusive<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(task, task);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
 
   private async load(): Promise<Record<string, StoredEntry>> {
     try {
-      return JSON.parse(await readFile(this.path, 'utf8')) as Record<string, StoredEntry>;
+      const parsed: unknown = JSON.parse(await readFile(this.path, 'utf8'));
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('Credential store file is malformed');
+      }
+      return parsed as Record<string, StoredEntry>;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
       throw error;
@@ -40,18 +55,27 @@ export class CredentialStore {
     await rename(tmp, this.path);
   }
 
-  async put(value: string): Promise<string> {
-    const entries = await this.load();
-    const ref = randomUUID();
-    const sealed = this.protector?.isAvailable();
-    entries[ref] = {
-      sealed: sealed
-        ? this.protector!.encrypt(value).toString('base64')
-        : Buffer.from(value).toString('base64'),
-      protected: Boolean(sealed),
-    };
-    await this.save(entries);
-    return ref;
+  put(value: string): Promise<string> {
+    const protector = this.protector?.isAvailable() ? this.protector : undefined;
+    const sealed = protector !== undefined;
+    if (!sealed && !this.allowUnprotected) {
+      return Promise.reject(
+        new Error('OS protected storage is unavailable; the credential was not saved')
+      );
+    }
+    return this.exclusive(async () => {
+      const entries = await this.load();
+      const ref = randomUUID();
+      entries[ref] = {
+        sealed: protector
+          ? protector.encrypt(value).toString('base64')
+          : Buffer.from(value).toString('base64'),
+        protected: sealed,
+        createdAt: Date.now(),
+      };
+      await this.save(entries);
+      return ref;
+    });
   }
 
   async get(ref: string): Promise<string | null> {
@@ -63,11 +87,19 @@ export class CredentialStore {
     return this.protector.decrypt(bytes);
   }
 
-  async list(): Promise<string[]> {
-    return Object.keys(await this.load());
+  /** References older than `minAgeMs`, so a sweep never races a save still being recorded. */
+  async list(minAgeMs = 0): Promise<string[]> {
+    const cutoff = Date.now() - minAgeMs;
+    return Object.entries(await this.load())
+      .filter(([, e]) => (e.createdAt ?? 0) <= cutoff)
+      .map(([ref]) => ref);
   }
 
-  async remove(ref: string): Promise<boolean> {
+  remove(ref: string): Promise<boolean> {
+    return this.exclusive(() => this.removeNow(ref));
+  }
+
+  private async removeNow(ref: string): Promise<boolean> {
     const entries = await this.load();
     if (!(ref in entries)) return false;
     delete entries[ref];
@@ -111,12 +143,20 @@ export async function startCredentialBroker(
     void (async () => {
       if (!authorized(req.headers.authorization, bootstrapSecret)) return send(401, {});
       const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
-      if (path === '/secrets' && req.method === 'GET')
-        return send(200, { refs: await store.list() });
+      if (path === '/secrets' && req.method === 'GET') {
+        const minAge = Number(
+          new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('minAgeMs') ?? 0
+        );
+        return send(200, { refs: await store.list(Number.isFinite(minAge) ? minAge : 0) });
+      }
       if (path === '/secrets' && req.method === 'POST') {
-        const body = JSON.parse(await readBody(req)) as { value?: unknown };
-        if (typeof body.value !== 'string') return send(400, {});
-        return send(201, { ref: await store.put(body.value) });
+        const body: unknown = JSON.parse(await readBody(req));
+        const value =
+          typeof body === 'object' && body !== null
+            ? (body as { value?: unknown }).value
+            : undefined;
+        if (typeof value !== 'string') return send(400, {});
+        return send(201, { ref: await store.put(value) });
       }
       const ref = path.startsWith('/secrets/') ? decodeURIComponent(path.slice(9)) : '';
       if (!REF_PATTERN.test(ref)) return send(404, {});
