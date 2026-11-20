@@ -48,7 +48,7 @@ export function normalizeLocalProjectPath(input: string | undefined): string {
     throw errors.badRequest('localPath must not contain ".." segments');
   }
   if (WINDOWS_ABSOLUTE_PATH.test(path)) {
-    const windows = `${path[0]!.toUpperCase()}${path.slice(1).replace(/[\\/]+/g, '\\')}`;
+    const windows = `${path.charAt(0).toUpperCase()}${path.slice(1).replace(/[\\/]+/g, '\\')}`;
     return windows.length > 3 ? windows.replace(/\\$/, '') : windows;
   }
   const posix = path.replace(/\/+/g, '/');
