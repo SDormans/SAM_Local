@@ -15,6 +15,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { useProjectList } from '../hooks/useProjectData';
 import { useSamSettings } from '../hooks/useSamSettings';
 import { signOut } from '../lib/auth';
+import { getDesktopBridge } from '../lib/desktop-bridge';
 import {
   FOCUS_MODE_STORAGE_KEY,
   type FocusMode,
@@ -65,6 +66,8 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
+  // Local desktop installs have no cloud onboarding (spec 036).
+  const isDesktop = getDesktopBridge() !== null;
   const { user, isSuperadmin } = useAuth();
   const isMobile = useIsMobile();
   const sam = useSamSettings();
@@ -277,7 +280,7 @@ export function AppShell({ children }: AppShellProps) {
     return (
       <AppShellContext.Provider value={shellContext}>
         <OnboardingProvider>
-          <ChoosePathWizard />
+          {!isDesktop && <ChoosePathWizard />}
           <div className="flex flex-col h-screen">
             <SkipToContent />
             <header className="relative z-30 flex items-center justify-between px-4 py-2 glass-chrome glass-panel-container glass-composited border-x-0 border-t-0 after:content-[''] after:absolute after:bottom-0 after:left-[10%] after:right-[10%] after:h-0.5 after:bg-[radial-gradient(ellipse_at_center,var(--sam-chrome-accent-glow)_0%,transparent_70%)] after:blur-[1px] after:pointer-events-none">
@@ -348,7 +351,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <AppShellContext.Provider value={shellContext}>
       <OnboardingProvider>
-        <ChoosePathWizard />
+        {!isDesktop && <ChoosePathWizard />}
         <div
           className="grid h-screen overflow-hidden transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none"
           style={{

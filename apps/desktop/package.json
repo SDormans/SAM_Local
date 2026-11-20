@@ -4,13 +4,16 @@
   "private": true,
   "description": "Windows single-user local SAM desktop runtime (local-only; not used by hosted deployments)",
   "type": "module",
+  "main": "dist/main/index.js",
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:feasibility": "vitest run --config vitest.feasibility.config.ts",
     "typecheck": "tsc --noEmit",
-    "test:runtime": "vitest run --config vitest.runtime.config.ts"
+    "test:runtime": "vitest run --config vitest.runtime.config.ts",
+    "start": "pnpm run build && electron .",
+    "test:e2e": "pnpm run build && playwright test --config playwright.config.ts"
   },
   "dependencies": {
     "@iarna/toml": "2.2.5"
@@ -19,6 +22,8 @@
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "electron": "44.11.5",
+    "@playwright/test": "1.62.1"
   }
 }

@@ -4,8 +4,8 @@
  * access, and server-validated local sessions with ownership isolation.
  */
 import { spawn } from 'node:child_process';
-import { request } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -167,6 +167,97 @@ describe('local API runtime', () => {
     expect(JSON.stringify(await list.json())).not.toContain('foreign-project');
     const direct = await fetch(`${base}/api/projects/foreign-project`, { headers: { cookie } });
     expect(direct.status).toBe(404);
+  });
+
+  it('answers the web app session calls from the local session', async () => {
+    const base = api!.url;
+    const anonymous = await fetch(`${base}/api/auth/get-session`);
+    expect(anonymous.status).toBe(200);
+    expect(await anonymous.json()).toBeNull();
+    const cookie = await login(base);
+    const session = await (
+      await fetch(`${base}/api/auth/get-session`, { headers: { cookie } })
+    ).json();
+    expect(session.user).toMatchObject({ role: 'superadmin', status: 'active' });
+    expect(session.user.id).toMatch(/^local-/);
+    const me = await fetch(`${base}/api/auth/me`, { headers: { cookie } });
+    expect((await me.json()).id).toBe(session.user.id);
+    expect(
+      (await fetch(`${base}/api/auth/sign-out`, { method: 'POST', headers: { cookie } })).status
+    ).toBe(200);
+    expect(
+      await (await fetch(`${base}/api/auth/get-session`, { headers: { cookie } })).json()
+    ).toBeNull();
+  });
+
+  it('reports health from supervisor-provided prerequisites and the data store', async () => {
+    const base = api!.url;
+    const cookie = await login(base);
+    expect((await fetch(`${base}/api/local/health`)).status).toBe(401);
+    const unreported = await (
+      await fetch(`${base}/api/local/health`, { headers: { cookie } })
+    ).json();
+    expect(unreported).toMatchObject({
+      status: 'degraded',
+      dataStore: 'ready',
+      dockerDesktop: 'unavailable',
+    });
+    const body = JSON.stringify({ dockerDesktop: 'ready', wsl2: 'ready' });
+    const put = (authorization?: string) =>
+      fetch(`${base}/api/local/health/prerequisites`, {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          ...(authorization ? { authorization } : {}),
+        },
+        body,
+      });
+    expect((await put()).status).toBe(401);
+    expect((await put(`Bearer ${secrets.LOCAL_BOOTSTRAP_SECRET}`)).status).toBe(200);
+    const ready = await (await fetch(`${base}/api/local/health`, { headers: { cookie } })).json();
+    expect(ready).toEqual({
+      status: 'ready',
+      dockerDesktop: 'ready',
+      wsl2: 'ready',
+      dataStore: 'ready',
+    });
+  });
+
+  it('creates a local-folder project without cloning and rejects unsafe paths', async () => {
+    const base = api!.url;
+    const cookie = await login(base);
+    const create = (payload: Record<string, unknown>) =>
+      fetch(`${base}/api/projects`, {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    const created = await create({
+      name: 'Demo',
+      repoProvider: 'local',
+      localPath: 'C:\\code\\demo\\',
+    });
+    expect(created.status).toBe(201);
+    const project = await created.json();
+    expect(project).toMatchObject({ repoProvider: 'local', repository: 'C:\\code\\demo' });
+    expect(
+      (await create({ name: 'Again', repoProvider: 'local', localPath: 'C:\\code\\demo' })).status
+    ).toBe(409);
+    expect(
+      (await create({ name: 'Same', repoProvider: 'local', localPath: 'c:/Code/Demo/' })).status
+    ).toBe(409);
+    expect(
+      (await create({ name: 'Rel', repoProvider: 'local', localPath: 'code/demo' })).status
+    ).toBe(400);
+    const list = await (await fetch(`${base}/api/projects`, { headers: { cookie } })).json();
+    expect(JSON.stringify(list)).toContain(project.id);
+    const renamed = await fetch(`${base}/api/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Demo renamed' }),
+    });
+    expect(renamed.status).toBe(200);
+    expect(await renamed.json()).toMatchObject({ name: 'Demo renamed', repoProvider: 'local' });
   });
 
   it('keeps the principal and session across a full runtime restart', async () => {

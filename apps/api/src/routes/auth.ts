@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
+import { deleteCookie, getCookie } from 'hono/cookie';
 
 import { createAuth } from '../auth';
 import type { Env } from '../env';
 import { log, serializeError } from '../lib/logger';
 import { expectJsonRecord } from '../lib/runtime-validation';
+import { LOCAL_SESSION_COOKIE, resolveLocalSession, revokeLocalSession } from '../local/local-auth';
+import { isLocalRuntime } from '../local/runtime-mode';
 import { errors } from '../middleware/error';
 import { assertUserNotSuspended } from '../services/signup-approval';
 import { maybeAttachTrialClaimCookie } from '../services/trial/oauth-hook';
@@ -15,6 +18,12 @@ const authRoutes = new Hono<{ Bindings: Env }>();
  * Returns user profile with GitHub info
  */
 authRoutes.get('/me', async (c) => {
+  if (isLocalRuntime(c.env)) {
+    const local = await resolveLocalSession(c.env, getCookie(c, LOCAL_SESSION_COOKIE));
+    if (!local) throw errors.unauthorized('Not authenticated');
+    assertUserNotSuspended(local.user);
+    return c.json({ ...local.user, createdAt: null });
+  }
   const auth = await createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
@@ -36,6 +45,29 @@ authRoutes.get('/me', async (c) => {
     status: typeof user.status === 'string' ? user.status : 'active',
     createdAt: session.user.createdAt,
   });
+});
+
+/**
+ * Local desktop runtime (spec 036): answer the BetterAuth client's session and sign-out
+ * calls from the local session so the web app needs no local-only auth code.
+ */
+authRoutes.get('/get-session', async (c, next) => {
+  if (!isLocalRuntime(c.env)) return next();
+  const local = await resolveLocalSession(c.env, getCookie(c, LOCAL_SESSION_COOKIE));
+  if (!local) return c.json(null);
+  assertUserNotSuspended(local.user);
+  const { avatarUrl, ...user } = local.user;
+  return c.json({
+    session: { id: local.session.id, userId: user.id, expiresAt: local.session.expiresAt },
+    user: { ...user, image: avatarUrl, emailVerified: false },
+  });
+});
+
+authRoutes.post('/sign-out', async (c, next) => {
+  if (!isLocalRuntime(c.env)) return next();
+  await revokeLocalSession(c.env, getCookie(c, LOCAL_SESSION_COOKIE));
+  deleteCookie(c, LOCAL_SESSION_COOKIE, { path: '/' });
+  return c.json({ success: true });
 });
 
 /**
