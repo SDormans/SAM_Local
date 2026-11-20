@@ -51,10 +51,19 @@ localModelsRoutes.post(
     }
     const result = await verifyLocalModelConnection(connection);
     if (result.status !== 'usable') return c.json(result, 502);
-    await writeLocalModelConnection(c.env, {
-      ...connection,
-      lastVerifiedAt: new Date().toISOString(),
-    });
+    // Only stamp the settings that were checked; a save during verification wins.
+    const current = await readLocalModelConnection(c.env);
+    if (
+      current &&
+      current.baseUrl === connection.baseUrl &&
+      current.modelId === connection.modelId &&
+      current.providerType === connection.providerType
+    ) {
+      await writeLocalModelConnection(c.env, {
+        ...current,
+        lastVerifiedAt: new Date().toISOString(),
+      });
+    }
     return c.json(result);
   }
 );
