@@ -45,7 +45,7 @@ import { withRequestScopedD1Bindings } from './lib/d1-session';
 import { log, serializeError } from './lib/logger';
 import { resolvePagesProxyTarget } from './lib/pages-proxy';
 import { parseWorkspaceSubdomain } from './lib/workspace-subdomain';
-import { sweepLocalSecrets } from './local/local-secret-store';
+import { referencedLocalSecrets, sweepLocalSecrets } from './local/local-secret-store';
 import { isLocalRuntime, localRuntimeGuard, withLocalRuntimeBindings } from './local/runtime-mode';
 import { analyticsMiddleware } from './middleware/analytics';
 import { apiCors } from './middleware/api-cors';
@@ -201,16 +201,11 @@ app.onError(handleAppError);
 app.use('*', localRuntimeGuard());
 // Spec 036 T035: after a credential change, drop desktop-stored secrets nothing references.
 app.use('*', async (c, next) => {
+  const tracked = isLocalRuntime(c.env) && c.req.method !== 'GET' && /credential/.test(c.req.path);
+  const before = tracked ? await referencedLocalSecrets(c.env).catch(() => undefined) : undefined;
   await next();
-  if (
-    !isLocalRuntime(c.env) ||
-    c.req.method === 'GET' ||
-    c.res.status >= 400 ||
-    !/credential/.test(c.req.path)
-  ) {
-    return;
-  }
-  await sweepLocalSecrets(c.env).catch((error: unknown) =>
+  if (!tracked || c.res.status >= 400) return;
+  await sweepLocalSecrets(c.env, before).catch((error: unknown) =>
     log.warn('local_secret_sweep_failed', { error: (error as Error).message })
   );
 });
