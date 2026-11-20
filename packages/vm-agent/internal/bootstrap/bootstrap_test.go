@@ -3861,3 +3861,10 @@ func TestDevcontainerUpArgsAddsInstallationLabels(t *testing.T) {
 		t.Fatalf("hosted nodes must keep default identity labels, got %q", got)
 	}
 }
+
+func TestEnsureWorkspaceOwnershipLeavesLocalFoldersAlone(t *testing.T) {
+	cfg := &config.Config{ContainerUser: "node", RepoProvider: "local", Repository: "/home/me/demo"}
+	if err := ensureWorkspaceOwnership(context.Background(), cfg); err != nil {
+		t.Fatalf("ensureWorkspaceOwnership = %v, want nil without touching docker", err)
+	}
+}

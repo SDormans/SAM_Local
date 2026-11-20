@@ -1668,6 +1668,11 @@ func ensureWorkspaceOwnership(ctx context.Context, cfg *config.Config) error {
 	if user == "" || user == "root" {
 		return nil
 	}
+	if isLocalRepoProvider(cfg.RepoProvider) {
+		// Spec 036: /workspaces holds the user's own folder; never rewrite its ownership.
+		slog.Info("Local folder workspace, leaving ownership unchanged", "user", user)
+		return nil
+	}
 
 	containerID, err := findDevcontainerID(ctx, cfg)
 	if err != nil {
