@@ -42,6 +42,7 @@ agentsCatalogRoutes.get('/', async (c) => {
       .select({
         agentType: schema.agentSettings.agentType,
         providerMode: schema.agentSettings.providerMode,
+        inferenceMode: schema.agentSettings.inferenceMode,
       })
       .from(schema.agentSettings)
       .where(eq(schema.agentSettings.userId, userId)),
@@ -67,7 +68,10 @@ agentsCatalogRoutes.get('/', async (c) => {
       aiProxyEnabled &&
       (agent.id === 'claude-code' || agent.id === 'openai-codex') &&
       providerModeMap.get(agent.id) === 'sam';
-    const usesLocalModel = agent.id === 'opencode' && localModelReady;
+    const usesLocalModel =
+      agent.id === 'opencode' &&
+      localModelReady &&
+      agentProviderSettings.find((s) => s.agentType === agent.id)?.inferenceMode !== 'cloud';
     return {
       id: agent.id,
       name: agent.name,
