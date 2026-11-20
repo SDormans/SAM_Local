@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -71,6 +71,10 @@ describe('runtime secrets', () => {
       const vars = renderDevVars(first);
       expect(vars).toContain('LOCAL_BOOTSTRAP_SECRET="');
       expect(vars.split('\n').filter(Boolean)).toHaveLength(5);
+      await writeFile(path, '{"ENCRYPTION_KEY":');
+      await expect(loadOrCreateRuntimeSecrets(path)).rejects.toThrow(/unreadable/);
+      expect(await readFile(path, 'utf8')).toBe('{"ENCRYPTION_KEY":');
+      await expect(loadOrCreateRuntimeSecrets(dir)).rejects.toThrow();
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

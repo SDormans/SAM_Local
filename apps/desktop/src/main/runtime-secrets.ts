@@ -51,13 +51,28 @@ function parseSecrets(raw: string): LocalRuntimeSecrets | null {
   return record as unknown as LocalRuntimeSecrets;
 }
 
-/** Reads the installation secrets, creating them on first run. Files are owner-only (0600). */
+/**
+ * Reads the installation secrets, creating them only when none exist yet. An unreadable file
+ * is an error, never a reason to regenerate: credentials encrypted with the old
+ * `ENCRYPTION_KEY` would become unreadable. Files are owner-only (0600).
+ */
 export async function loadOrCreateRuntimeSecrets(path: string): Promise<LocalRuntimeSecrets> {
-  const existing = await readFile(path, 'utf8').then(parseSecrets, () => null);
-  if (existing) return existing;
-  const secrets = generateRuntimeSecrets();
-  await writeFile(path, JSON.stringify(secrets), { mode: 0o600 });
-  return secrets;
+  let raw: string;
+  try {
+    raw = await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    const secrets = generateRuntimeSecrets();
+    await writeFile(path, JSON.stringify(secrets), { mode: 0o600, flag: 'wx' });
+    return secrets;
+  }
+  const existing = parseSecrets(raw);
+  if (!existing) {
+    throw new Error(
+      `Local runtime secrets at ${path} are unreadable; restore them from a backup instead of regenerating them`
+    );
+  }
+  return existing;
 }
 
 /** Renders the `.dev.vars` file wrangler reads next to the generated config. */
