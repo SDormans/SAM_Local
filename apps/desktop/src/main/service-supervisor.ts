@@ -62,6 +62,7 @@ export class ServiceSupervisor extends EventEmitter {
   private current: SupervisorStatus = { state: 'stopped' };
   private api: RunningLocalApi | undefined;
   private secrets: LocalRuntimeSecrets | undefined;
+  private startup: Promise<SupervisorStatus> | undefined;
   private sessionCookie: LocalSessionCookie | undefined;
   private prerequisites: LocalPrerequisites | undefined;
   readonly store: LocalDataStore;
@@ -94,7 +95,14 @@ export class ServiceSupervisor extends EventEmitter {
   }
 
   async start(): Promise<SupervisorStatus> {
-    if (this.current.state === 'running' || this.current.state === 'starting') return this.status;
+    if (this.current.state === 'running') return this.status;
+    this.startup ??= this.runStartup().finally(() => {
+      this.startup = undefined;
+    });
+    return this.startup;
+  }
+
+  private async runStartup(): Promise<SupervisorStatus> {
     this.setStatus({ state: 'starting' });
     let installation: InstallationRecord | undefined;
     try {
@@ -120,6 +128,7 @@ export class ServiceSupervisor extends EventEmitter {
       void api.exited.then(() => this.onApiExit(api));
       this.sessionCookie = await this.bootstrapSession(api.url, secrets);
       await this.reportPrerequisites();
+      if (this.api !== api) throw new Error('The local SAM service stopped unexpectedly');
       this.setStatus({
         state: 'running',
         url: api.url,
@@ -198,9 +207,12 @@ export class ServiceSupervisor extends EventEmitter {
   }
 
   async stop(): Promise<SupervisorStatus> {
+    // Let an in-flight startup settle so the process it spawns is stopped, not orphaned.
+    if (this.startup) await this.startup;
     const api = this.api;
     if (!api) {
-      if (this.current.state !== 'failed') this.setStatus({ state: 'stopped' });
+      this.sessionCookie = undefined;
+      this.setStatus({ state: 'stopped', installationId: this.current.installationId });
       return this.status;
     }
     this.setStatus({ ...this.current, state: 'stopping' });

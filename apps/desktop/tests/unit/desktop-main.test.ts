@@ -265,7 +265,8 @@ describe('ServiceSupervisor', () => {
     });
     expect(await sup.start()).toMatchObject({ state: 'failed', error: /HTTP 401/ });
     expect(api.stop).toHaveBeenCalled();
-    expect(await sup.stop()).toMatchObject({ state: 'failed' });
+    // Nothing is running after a failed start, so quitting must be possible.
+    expect(await sup.stop()).toMatchObject({ state: 'stopped' });
 
     const noCookie = supervisor({
       fetchImpl: (async () => new Response('{}')) as unknown as typeof fetch,
@@ -278,6 +279,38 @@ describe('ServiceSupervisor', () => {
       },
     }).sup;
     expect(await migrationFails.start()).toMatchObject({ state: 'failed', error: /bad migration/ });
+  });
+
+  it('waits for an in-flight startup on stop so its process is not orphaned', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { sup, api } = supervisor({
+      probePrerequisites: async () => {
+        await gate;
+        return { dockerDesktop: 'ready', wsl2: 'ready' };
+      },
+    });
+    const starting = sup.start();
+    const again = sup.start();
+    await new Promise((r) => setTimeout(r, 20));
+    const stopping = sup.stop();
+    release();
+    expect((await starting).state).toBe((await again).state);
+    expect(await stopping).toMatchObject({ state: 'stopped' });
+    expect(api.stop).toHaveBeenCalled();
+  });
+
+  it('reports a crash during startup instead of running', async () => {
+    const api = fakeApi();
+    const { sup } = supervisor({
+      startApi: async () => api,
+      probePrerequisites: async () => {
+        api.crash();
+        await new Promise((r) => setTimeout(r, 0));
+        return { dockerDesktop: 'ready', wsl2: 'ready' };
+      },
+    });
+    expect(await sup.start()).toMatchObject({ state: 'failed', error: /unexpectedly/ });
   });
 
   it('reports a stop that fails and an active-work read that fails', async () => {
