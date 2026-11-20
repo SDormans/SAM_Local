@@ -19,6 +19,7 @@ import * as v from 'valibot';
 import * as schema from '../db/schema';
 import type { Env } from '../env';
 import { ulid } from '../lib/ulid';
+import { isLocalRuntime } from '../local/runtime-mode';
 import { getUserId, requireApproved, requireAuth } from '../middleware/auth';
 import { errors } from '../middleware/error';
 import {
@@ -175,6 +176,8 @@ function toResponse(row: schema.AgentSettingsRow): AgentSettingsResponse {
     opencodeProvider: opencodeProviderFromDb(row.opencodeProvider),
     opencodeBaseUrl: row.opencodeBaseUrl ?? null,
     providerMode: providerModeFromDb(row.providerMode),
+    inferenceMode:
+      row.inferenceMode === 'local' || row.inferenceMode === 'cloud' ? row.inferenceMode : null,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
   };
@@ -197,10 +200,7 @@ agentSettingsRoutes.get('/:agentType', async (c) => {
     .select()
     .from(schema.agentSettings)
     .where(
-      and(
-        eq(schema.agentSettings.userId, userId),
-        eq(schema.agentSettings.agentType, agentType)
-      )
+      and(eq(schema.agentSettings.userId, userId), eq(schema.agentSettings.agentType, agentType))
     )
     .limit(1);
 
@@ -216,6 +216,7 @@ agentSettingsRoutes.get('/:agentType', async (c) => {
       opencodeProvider: null,
       opencodeBaseUrl: null,
       providerMode: null,
+      inferenceMode: null,
       createdAt: null,
       updatedAt: null,
     } as AgentSettingsResponse);
@@ -241,6 +242,11 @@ agentSettingsRoutes.put('/:agentType', async (c) => {
     return parsedBody;
   }
   const body = parsedBody;
+  if (body.inferenceMode === 'local' && (!isLocalRuntime(c.env) || agentType !== 'opencode')) {
+    throw errors.badRequest(
+      'Local inference is available only for OpenCode in the SAM desktop app.'
+    );
+  }
 
   const db = drizzle(c.env.DATABASE, { schema });
   const now = new Date();
@@ -250,10 +256,7 @@ agentSettingsRoutes.put('/:agentType', async (c) => {
     .select({ id: schema.agentSettings.id })
     .from(schema.agentSettings)
     .where(
-      and(
-        eq(schema.agentSettings.userId, userId),
-        eq(schema.agentSettings.agentType, agentType)
-      )
+      and(eq(schema.agentSettings.userId, userId), eq(schema.agentSettings.agentType, agentType))
     )
     .limit(1);
 
@@ -268,10 +271,9 @@ agentSettingsRoutes.put('/:agentType', async (c) => {
     deniedTools: body.deniedTools ? JSON.stringify(body.deniedTools) : null,
     additionalEnv: body.additionalEnv ? JSON.stringify(body.additionalEnv) : null,
     opencodeProvider: body.opencodeProvider ?? null,
-    opencodeBaseUrl: requiresBaseUrl(body.opencodeProvider)
-      ? (body.opencodeBaseUrl ?? null)
-      : null,
+    opencodeBaseUrl: requiresBaseUrl(body.opencodeProvider) ? (body.opencodeBaseUrl ?? null) : null,
     providerMode: body.providerMode ?? null,
+    inferenceMode: body.inferenceMode ?? null,
     updatedAt: now,
   };
 
@@ -297,10 +299,7 @@ agentSettingsRoutes.put('/:agentType', async (c) => {
     .select()
     .from(schema.agentSettings)
     .where(
-      and(
-        eq(schema.agentSettings.userId, userId),
-        eq(schema.agentSettings.agentType, agentType)
-      )
+      and(eq(schema.agentSettings.userId, userId), eq(schema.agentSettings.agentType, agentType))
     )
     .limit(1);
 
@@ -328,10 +327,7 @@ agentSettingsRoutes.delete('/:agentType', async (c) => {
   await db
     .delete(schema.agentSettings)
     .where(
-      and(
-        eq(schema.agentSettings.userId, userId),
-        eq(schema.agentSettings.agentType, agentType)
-      )
+      and(eq(schema.agentSettings.userId, userId), eq(schema.agentSettings.agentType, agentType))
     );
 
   return c.json({ success: true });

@@ -537,6 +537,7 @@ export type {
 // Agent Settings & Profiles
 export type {
   AgentEffort,
+  AgentInferenceMode,
   AgentPermissionMode,
   AgentProfile,
   AgentProfileRuntime,

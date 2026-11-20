@@ -73,28 +73,24 @@ export function createSaveAgentSettingsSchema(
       opencodeProvider: v.optional(v.nullable(OpenCodeProviderSchema)),
       opencodeBaseUrl: v.optional(v.nullable(BoundedStringSchema(limits.maxBaseUrlLength))),
       providerMode: v.optional(v.nullable(AgentProviderModeSchema)),
+      // Spec 036: explicit inference destination. 'local' is accepted only by the local runtime.
+      inferenceMode: v.optional(v.nullable(v.picklist(['local', 'cloud']))),
     }),
-    v.check(
-      (input) => {
-        const provider = input.opencodeProvider;
-        return !provider || !OPENCODE_PROVIDERS[provider].requiresBaseUrl || !!input.opencodeBaseUrl;
-      },
-      'opencodeBaseUrl is required for providers that require a base URL'
-    ),
-    v.check(
-      (input) => {
-        if (input.opencodeBaseUrl) {
-          try {
-            const url = new URL(input.opencodeBaseUrl);
-            return url.protocol === 'https:';
-          } catch {
-            return false;
-          }
+    v.check((input) => {
+      const provider = input.opencodeProvider;
+      return !provider || !OPENCODE_PROVIDERS[provider].requiresBaseUrl || !!input.opencodeBaseUrl;
+    }, 'opencodeBaseUrl is required for providers that require a base URL'),
+    v.check((input) => {
+      if (input.opencodeBaseUrl) {
+        try {
+          const url = new URL(input.opencodeBaseUrl);
+          return url.protocol === 'https:';
+        } catch {
+          return false;
         }
-        return true;
-      },
-      'opencodeBaseUrl must be a valid HTTPS URL'
-    ),
+      }
+      return true;
+    }, 'opencodeBaseUrl must be a valid HTTPS URL')
   );
 }
 
