@@ -7,6 +7,11 @@ import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 
 import {
+  CredentialStore,
+  type RunningCredentialBroker,
+  startCredentialBroker,
+} from './credential-store.js';
+import {
   applyLocalMigrations,
   type LocalApiRuntimeOptions,
   type RunningLocalApi,
@@ -15,11 +20,6 @@ import {
 } from './local-api-runtime.js';
 import { type InstallationRecord, latestMigrationVersion, LocalDataStore } from './local-data.js';
 import type { LocalPrerequisites } from './prerequisites.js';
-import {
-  CredentialStore,
-  type RunningCredentialBroker,
-  startCredentialBroker,
-} from './credential-store.js';
 import {
   loadOrCreateRuntimeSecrets,
   type LocalRuntimeSecrets,
@@ -180,7 +180,10 @@ export class ServiceSupervisor extends EventEmitter {
       this.secrets = secrets;
       await this.credentialBroker?.stop();
       this.credentialBroker = await startCredentialBroker(
-        new CredentialStore(join(this.store.runtimeDir, 'credentials.json'), this.options.secretProtector),
+        new CredentialStore(
+          join(this.store.runtimeDir, 'credentials.json'),
+          this.options.secretProtector
+        ),
         secrets.LOCAL_BOOTSTRAP_SECRET
       );
       const runtime: LocalApiRuntimeOptions = {
@@ -308,6 +311,25 @@ export class ServiceSupervisor extends EventEmitter {
       });
       if (!response.ok) throw new Error(`Prerequisite report failed (HTTP ${response.status})`);
     }
+    // "Check again" after Docker starts: bring up local workspaces without a restart.
+    const installationId = this.current.installationId;
+    if (
+      prerequisites.dockerDesktop === 'ready' &&
+      this.current.state === 'running' &&
+      !this.workspaceRuntime &&
+      url &&
+      this.secrets &&
+      installationId
+    ) {
+      const workspaceRuntimeError = await this.startWorkspaceRuntime(
+        url,
+        this.secrets,
+        installationId
+      );
+      const next = { ...this.current };
+      delete next.workspaceRuntimeError;
+      this.setStatus(workspaceRuntimeError ? { ...next, workspaceRuntimeError } : next);
+    }
     return prerequisites;
   }
 
@@ -334,6 +356,8 @@ export class ServiceSupervisor extends EventEmitter {
     if (this.startup) await this.startup;
     const api = this.api;
     if (!api) {
+      // The API may have crashed; workspace containers can still be running.
+      await this.stopWorkspaceRuntime();
       this.sessionCookie = undefined;
       this.setStatus({ state: 'stopped', installationId: this.current.installationId });
       return this.status;
