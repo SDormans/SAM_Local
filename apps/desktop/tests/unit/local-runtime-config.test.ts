@@ -30,6 +30,7 @@ describe('buildLocalWranglerConfig', () => {
       ARTIFACTS_ENABLED: 'false',
       LOCAL_SESSION_TTL_SECONDS: '600',
     });
+    expect(vars.BASE_DOMAIN).toBe('sam-local.invalid');
     const d1 = config.d1_databases as Array<{ binding: string; migrations_dir: string }>;
     const database = d1.find((d) => d.binding === 'DATABASE');
     expect(database?.migrations_dir).toBe(join(apiDir, 'src/db/migrations'));

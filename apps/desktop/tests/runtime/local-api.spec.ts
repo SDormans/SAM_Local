@@ -102,19 +102,23 @@ describe('local API runtime', () => {
   it('serves health on loopback and rejects non-loopback Host headers', async () => {
     const { url } = await boot();
     expect((await fetch(`${url}/health`)).status).toBe(200);
-    // fetch() cannot override Host, so send a DNS-rebinding style request with node:http.
-    const rebound = await new Promise<{ status: number; body: string }>((ok, fail) => {
-      const req = request(
-        { host: '127.0.0.1', port: PORT, path: '/health', headers: { host: 'attacker.example' } },
-        (res) => {
-          let body = '';
-          res.on('data', (c: Buffer) => (body += c));
-          res.on('end', () => ok({ status: res.statusCode ?? 0, body }));
-        }
-      );
-      req.on('error', fail);
-      req.end();
-    });
+    // fetch() cannot override Host, so send requests with node:http.
+    const withHost = (host: string) =>
+      new Promise<{ status: number; body: string }>((ok, fail) => {
+        const req = request(
+          { host: '127.0.0.1', port: PORT, path: '/health', headers: { host } },
+          (res) => {
+            let body = '';
+            res.on('data', (c: Buffer) => (body += c));
+            res.on('end', () => ok({ status: res.statusCode ?? 0, body }));
+          }
+        );
+        req.on('error', fail);
+        req.end();
+      });
+    expect((await withHost(`localhost:${PORT}`)).status).toBe(200);
+    expect((await withHost(`[::1]:${PORT}`)).status).toBe(200);
+    const rebound = await withHost('attacker.example');
     expect(rebound.status).toBe(403);
     expect(JSON.parse(rebound.body).error).toBe('LOCAL_HOST_REJECTED');
   });
