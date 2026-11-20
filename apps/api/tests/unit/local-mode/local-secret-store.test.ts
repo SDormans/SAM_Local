@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Env } from '../../../src/env';
-import { sealCredential, sweepLocalSecrets } from '../../../src/local/local-secret-store';
+import {
+  referencedLocalSecrets,
+  sealCredential,
+  sweepLocalSecrets,
+} from '../../../src/local/local-secret-store';
 import { decrypt, generateEncryptionKey } from '../../../src/services/encryption';
 
 const KEY = generateEncryptionKey();
@@ -77,5 +81,32 @@ describe('local secret store', () => {
     const removed = await sweepLocalSecrets({ ...localEnv, DATABASE: db } as unknown as Env);
     expect(removed).toBe(1);
     await expect(decrypt(kept.ciphertext, kept.iv, KEY)).resolves.toBe('kept');
+  });
+
+  it('removes a just-deleted credential right away but keeps other fresh saves', async () => {
+    const inner = fakeBroker();
+    // Every entry is younger than the sweep window.
+    const broker = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+      new URL(String(input)).pathname === '/secrets' && !init?.method
+        ? Response.json({ refs: [] })
+        : inner(input, init)
+    );
+    vi.stubGlobal('fetch', broker);
+    const deleted = await sealCredential(localEnv, 'deleted');
+    const pending = await sealCredential(localEnv, 'pending-save');
+    let rows = [{ token: deleted.ciphertext }];
+    const db = {
+      prepare: (sql: string) => ({
+        bind: () => ({
+          all: async () => ({ results: sql.includes('FROM credentials') ? rows : [] }),
+        }),
+      }),
+    };
+    const env = { ...localEnv, DATABASE: db } as unknown as Env;
+    const before = await referencedLocalSecrets(env);
+    rows = [];
+    await expect(sweepLocalSecrets(env, before)).resolves.toBe(1);
+    await expect(decrypt(deleted.ciphertext, deleted.iv, KEY)).rejects.toThrow();
+    await expect(decrypt(pending.ciphertext, pending.iv, KEY)).resolves.toBe('pending-save');
   });
 });
