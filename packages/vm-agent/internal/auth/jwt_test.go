@@ -441,3 +441,20 @@ func TestValidateWorkspaceCallbackToken(t *testing.T) {
 		}
 	})
 }
+
+func TestLocalDesktopAllowsHTTPOnlyForPrivateHostsWhenOptedIn(t *testing.T) {
+	if err := ValidateJWKSURL("http://172.18.0.1:9000/.well-known/jwks.json"); err == nil {
+		t.Fatal("expected private http to be rejected without SAM_LOCAL_DESKTOP")
+	}
+	t.Setenv("SAM_LOCAL_DESKTOP", "true")
+	for _, u := range []string{"http://172.18.0.1:9000/x", "http://host.docker.internal:9000/x", "http://192.168.65.254/x"} {
+		if err := ValidateJWKSURL(u); err != nil {
+			t.Fatalf("expected %s to be allowed in local desktop mode: %v", u, err)
+		}
+	}
+	for _, u := range []string{"http://8.8.8.8/x", "http://example.com/x"} {
+		if err := ValidateJWKSURL(u); err == nil {
+			t.Fatalf("expected public %s to be rejected even in local desktop mode", u)
+		}
+	}
+}

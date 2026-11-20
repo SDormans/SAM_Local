@@ -245,6 +245,9 @@ func (h *SessionHost) injectAgentCredential(
 	case "user-credential":
 		return h.injectPassthroughProxyCredential(agentType, cred, settings, envVars)
 	case "callback-token":
+		if agentType == "opencode" {
+			return h.injectOpencodeGatewayCredential(cred, settings, envVars)
+		}
 		return h.injectPlatformProxyCredential(agentType, cred, settings, envVars)
 	default:
 		return append(envVars, fmt.Sprintf("%s=%s", credentialEnvVarName(agentType, settings, info), cred.credential)), settings, nil
@@ -404,11 +407,39 @@ func (h *SessionHost) injectProxyCredential(
 	return envVars, settings, nil
 }
 
+// injectOpencodeGatewayCredential points OpenCode at a SAM-owned OpenAI-compatible gateway
+// (spec 036 local model gateway) using the workspace callback token as its key. The destination
+// comes only from the control plane, and nothing here falls back to another provider.
+func (h *SessionHost) injectOpencodeGatewayCredential(
+	cred *agentCredential,
+	settings *agentSettingsPayload,
+	envVars []string,
+) ([]string, *agentSettingsPayload, error) {
+	token := h.callbackToken()
+	if token == "" {
+		return envVars, settings, fmt.Errorf("model gateway configured but CallbackToken is empty for workspace %s", h.config.WorkspaceID)
+	}
+	if cred.inferenceConfig.Provider != "openai-compatible" {
+		return envVars, settings, fmt.Errorf("model gateway provider %q not supported for opencode in workspace %s", cred.inferenceConfig.Provider, h.config.WorkspaceID)
+	}
+	next := agentSettingsPayload{}
+	if settings != nil {
+		next = *settings
+	}
+	next.OpencodeProvider = "custom"
+	next.OpencodeBaseURL = h.proxyBaseURL(cred)
+	next.Model = cred.inferenceConfig.Model
+	slog.Info("OpenCode model gateway injected", "model", next.Model, "workspaceId", h.config.WorkspaceID)
+	return append(envVars, "OPENCODE_API_KEY="+token), &next, nil
+}
+
 func (h *SessionHost) proxyBaseURL(cred *agentCredential) string {
 	if cred == nil || cred.inferenceConfig == nil {
 		return ""
 	}
-	return strings.ReplaceAll(cred.inferenceConfig.BaseURL, "{wstoken}", h.callbackToken())
+	baseURL := strings.ReplaceAll(cred.inferenceConfig.BaseURL, "{wstoken}", h.callbackToken())
+	// Spec 036: the local runtime's model gateway sits behind the same relay as the control plane.
+	return strings.ReplaceAll(baseURL, "{controlPlaneUrl}", strings.TrimRight(h.config.ControlPlaneURL, "/"))
 }
 
 type proxyEnvDescriptor struct {

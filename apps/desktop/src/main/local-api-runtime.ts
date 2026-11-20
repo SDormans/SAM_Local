@@ -24,6 +24,8 @@ export interface LocalApiRuntimeOptions {
   wranglerBin?: string;
   readyTimeoutMs?: number;
   sessionTtlSeconds?: number;
+  nodeAgentPort?: number;
+  localDefaultModel?: string;
   /** Built `apps/web` output to serve same-origin with the API. */
   webDistDir?: string;
   onOutput?: (chunk: string) => void;
@@ -54,7 +56,14 @@ function wranglerBin(options: Pick<LocalApiRuntimeOptions, 'apiDir' | 'wranglerB
 export async function writeLocalRuntimeFiles(
   options: Pick<
     LocalApiRuntimeOptions,
-    'apiDir' | 'store' | 'installation' | 'secrets' | 'sessionTtlSeconds' | 'webDistDir'
+    | 'apiDir'
+    | 'store'
+    | 'installation'
+    | 'secrets'
+    | 'sessionTtlSeconds'
+    | 'nodeAgentPort'
+    | 'localDefaultModel'
+    | 'webDistDir'
   >
 ): Promise<string> {
   const source = await readFile(join(options.apiDir, 'wrangler.toml'), 'utf8');
@@ -65,6 +74,8 @@ export async function writeLocalRuntimeFiles(
       apiDir: options.apiDir,
       installationId: options.installation.installationId,
       sessionTtlSeconds: options.sessionTtlSeconds,
+      nodeAgentPort: options.nodeAgentPort,
+      localDefaultModel: options.localDefaultModel,
       webDistDir: options.webDistDir,
     })
   );

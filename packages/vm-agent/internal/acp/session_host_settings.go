@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -38,7 +39,7 @@ func (h *SessionHost) applySessionSettings(ctx context.Context, settings *agentS
 	ctx = settingsCtx
 
 	if settings.Model != "" {
-		if err := h.applySessionModelConfigOption(ctx, settings.Model); err != nil && h.agentType == "openai-codex" {
+		if err := h.applySessionModelConfigOption(ctx, sessionModelID(h.agentType, settings)); err != nil && h.agentType == "openai-codex" {
 			return fmt.Errorf("cannot apply requested Codex model %q: %w", settings.Model, err)
 		}
 	}
@@ -131,4 +132,13 @@ func (h *SessionHost) sessionSettingsTimeout() time.Duration {
 		return time.Duration(h.config.NewSessionTimeoutMs) * time.Millisecond
 	}
 	return DefaultSessionSettingsTimeout
+}
+
+// sessionModelID is the model id the agent knows: OpenCode registers a custom
+// OpenAI-compatible provider's model as "custom/<alias>" (see buildOpencodeConfig).
+func sessionModelID(agentType string, settings *agentSettingsPayload) string {
+	if agentType == "opencode" && settings.OpencodeProvider == "custom" && !strings.HasPrefix(settings.Model, "custom/") {
+		return "custom/" + sanitizeModelAlias(stripCFPrefix(settings.Model))
+	}
+	return settings.Model
 }

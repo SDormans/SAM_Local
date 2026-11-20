@@ -103,7 +103,9 @@ export interface ModelGatewayOptions {
    */
   privateNetworkHosts?: readonly string[];
   port?: number;
-  tokens: GatewayTokenStore;
+  tokens?: GatewayTokenStore;
+  /** Alternative to `tokens`: checks a token with a trusted authority (for example the local API). */
+  authorize?: (token: string | null) => Promise<TokenResolution>;
   resolveUpstream: (connectionId: string) => Promise<LocalModelUpstream | null>;
   upstreamHeadersTimeoutMs?: number;
   maxRequestBodyBytes?: number;
@@ -311,7 +313,10 @@ export async function startModelGateway(
       throw new GatewayError(405, 'method_not_allowed', 'Method not allowed');
     }
 
-    const resolution = options.tokens.resolve(bearerToken(req));
+    const token = bearerToken(req);
+    const resolution: TokenResolution = options.authorize
+      ? await options.authorize(token)
+      : (options.tokens?.resolve(token) ?? { ok: false, reason: 'invalid' });
     if (!resolution.ok) {
       throw new GatewayError(
         401,

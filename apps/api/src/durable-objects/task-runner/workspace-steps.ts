@@ -12,6 +12,7 @@ import {
 } from '@simple-agent-manager/shared';
 
 import { log } from '../../lib/logger';
+import { isLocalRuntime } from '../../local/runtime-mode';
 import type { DevcontainerCacheCredentials } from '../../services/devcontainer-cache';
 import { SessionRecoveryAuthorityRevokedError } from '../../services/session-recovery-authority';
 import {
@@ -188,11 +189,20 @@ async function createAndProvisionWorkspace(
   const admissionPolicy = resolveWorkspaceAdmissionPolicy(rc.env, state.config.projectScaling);
   admissionPolicy.allowBusyBuildQueue = await isUserConversationStart(state, rc);
   updatePlacementDiagnostics(state, { queue: {} });
+  // Spec 036: the desktop's own node is user-owned; hosted reservations stay managed-only.
+  const localNodeClass = isLocalRuntime(rc.env)
+    ? await rc.env.DATABASE.prepare('SELECT node_class AS nodeClass FROM nodes WHERE id = ?')
+        .bind(nodeId)
+        .first<{ nodeClass: string | null }>()
+    : null;
   const placementReserved = await reserveWorkspacePlacement(
     rc.env.DATABASE,
     {
       id: workspaceId,
       nodeId,
+      ...(localNodeClass?.nodeClass === 'user-owned'
+        ? { authorityNodeClass: 'user-owned' as const }
+        : {}),
       projectId: state.projectId,
       userId: state.userId,
       installationId: state.config.installationId,

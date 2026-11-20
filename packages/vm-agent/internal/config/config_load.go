@@ -337,6 +337,8 @@ func Load() (*Config, error) {
 		PortScanEnabled:      getEnvBool("PORT_SCAN_ENABLED", true),
 		PortScanInterval:     getEnvDuration("PORT_SCAN_INTERVAL", 5*time.Second),
 		PortScanExclude:      getEnv("PORT_SCAN_EXCLUDE", "22,2375,2376,8443"),
+		LocalProjectsRoot:    getEnv("LOCAL_PROJECTS_ROOT", ""),
+		ExtraContainerLabels: splitContainerLabels(getEnv("SAM_CONTAINER_LABELS", "")),
 		PortScanEphemeralMin: getEnvInt("PORT_SCAN_EPHEMERAL_MIN", 32768),
 		PortProxyCacheTTL:    getEnvDuration("PORT_PROXY_CACHE_TTL", 30*time.Second),
 
@@ -448,3 +450,13 @@ func Load() (*Config, error) {
 }
 
 // IsDeploymentMode returns true if the agent is running in deployment role.
+
+func splitContainerLabels(raw string) []string {
+	var labels []string
+	for _, label := range strings.Split(raw, ",") {
+		if label = strings.TrimSpace(label); strings.Contains(label, "=") {
+			labels = append(labels, label)
+		}
+	}
+	return labels
+}

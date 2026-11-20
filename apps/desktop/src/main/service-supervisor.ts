@@ -24,6 +24,18 @@ export interface SupervisorStatus {
   url?: string;
   installationId?: string;
   error?: string;
+  /** Set when the service runs but local workspaces cannot start (for example Docker is down). */
+  workspaceRuntimeError?: string;
+}
+
+export interface WorkspaceRuntimeContext {
+  apiUrl: string;
+  bootstrapSecret: string;
+  installationId: string;
+}
+
+export interface RunningWorkspaceRuntime {
+  stop(): Promise<void>;
 }
 
 export interface LocalSessionCookie {
@@ -36,6 +48,9 @@ export interface ServiceSupervisorOptions {
   apiDir: string;
   dataDir: string;
   port: number;
+  /** Loopback port the local node agent publishes (passed to the API as LOCAL_VM_AGENT_PORT). */
+  nodeAgentPort?: number;
+  localDefaultModel?: string;
   webDistDir?: string;
   wranglerBin?: string;
   probePrerequisites: () => Promise<LocalPrerequisites>;
@@ -43,6 +58,8 @@ export interface ServiceSupervisorOptions {
   migrate?: typeof applyLocalMigrations;
   fetchImpl?: typeof fetch;
   onOutput?: (chunk: string) => void;
+  /** Starts the local node agent once the API is running; failures leave the API running. */
+  startWorkspaceRuntime?: (context: WorkspaceRuntimeContext) => Promise<RunningWorkspaceRuntime>;
 }
 
 export const DEFAULT_SESSION_RENEW_MARGIN_MS = 10 * 60_000;
@@ -99,6 +116,7 @@ export class ServiceSupervisor extends EventEmitter {
   private current: SupervisorStatus = { state: 'stopped' };
   private api: RunningLocalApi | undefined;
   private secrets: LocalRuntimeSecrets | undefined;
+  private workspaceRuntime: RunningWorkspaceRuntime | undefined;
   private startup: Promise<SupervisorStatus> | undefined;
   private sessionCookie: LocalSessionCookie | undefined;
   private prerequisites: LocalPrerequisites | undefined;
@@ -152,6 +170,8 @@ export class ServiceSupervisor extends EventEmitter {
         installation,
         secrets,
         port: this.options.port,
+        nodeAgentPort: this.options.nodeAgentPort,
+        localDefaultModel: this.options.localDefaultModel,
         wranglerBin: this.options.wranglerBin,
         webDistDir: this.options.webDistDir,
         onOutput: this.options.onOutput,
@@ -166,12 +186,20 @@ export class ServiceSupervisor extends EventEmitter {
       this.sessionCookie = await this.bootstrapSession(api.url, secrets);
       await this.reportPrerequisites();
       if (this.api !== api) throw new Error('The local SAM service stopped unexpectedly');
+      const workspaceRuntimeError = await this.startWorkspaceRuntime(
+        api.url,
+        secrets,
+        installation.installationId
+      );
+      if (this.api !== api) throw new Error('The local SAM service stopped unexpectedly');
       this.setStatus({
         state: 'running',
         url: api.url,
         installationId: installation.installationId,
+        ...(workspaceRuntimeError ? { workspaceRuntimeError } : {}),
       });
     } catch (error) {
+      await this.stopWorkspaceRuntime();
       await this.api?.stop().catch(() => undefined);
       this.api = undefined;
       this.setStatus({
@@ -191,6 +219,34 @@ export class ServiceSupervisor extends EventEmitter {
       state: 'failed',
       installationId: this.current.installationId,
       error: 'The local SAM service stopped unexpectedly',
+    });
+  }
+
+  private async startWorkspaceRuntime(
+    apiUrl: string,
+    secrets: LocalRuntimeSecrets,
+    installationId: string
+  ): Promise<string | undefined> {
+    if (!this.options.startWorkspaceRuntime) return undefined;
+    try {
+      this.workspaceRuntime = await this.options.startWorkspaceRuntime({
+        apiUrl,
+        bootstrapSecret: secrets.LOCAL_BOOTSTRAP_SECRET,
+        installationId,
+      });
+      return undefined;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.options.onOutput?.(`Local workspaces unavailable: ${message}\n`);
+      return `Local workspaces are unavailable: ${message}`;
+    }
+  }
+
+  private async stopWorkspaceRuntime(): Promise<void> {
+    const runtime = this.workspaceRuntime;
+    this.workspaceRuntime = undefined;
+    await runtime?.stop().catch((error: unknown) => {
+      this.options.onOutput?.(`Local node stop failed: ${String(error)}\n`);
     });
   }
 
@@ -264,6 +320,7 @@ export class ServiceSupervisor extends EventEmitter {
     }
     this.setStatus({ ...this.current, state: 'stopping' });
     try {
+      await this.stopWorkspaceRuntime();
       await api.stop();
       this.api = undefined;
       this.sessionCookie = undefined;

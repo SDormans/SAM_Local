@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test:runtime": "vitest run --config vitest.runtime.config.ts",
     "start": "pnpm run build && electron .",
-    "test:e2e": "pnpm run build && playwright test --config playwright.config.ts"
+    "test:e2e": "pnpm run build && playwright test --config playwright.config.ts",
+    "build:node-image": "bash scripts/build-node-image.sh"
   },
   "dependencies": {
     "@iarna/toml": "2.2.5"

@@ -307,6 +307,16 @@ export const ALLOCATION_ENTRYPOINT_INVENTORY: readonly AllocationEntrypointInven
     status: 'canonical',
   },
   {
+    filePath: 'apps/api/src/local/local-node.ts',
+    owner: 'ensureLocalNode',
+    entrypoint: 'createNodeRecord',
+    scope: 'service',
+    role: 'workspace',
+    admission:
+      'spec 036 local runtime only: bootstrap-secret route registers the single user-owned local-docker node of the installation; no cloud capacity is allocated and workspaces still pass the final atomic reservation',
+    status: 'runtime-adapter',
+  },
+  {
     filePath: 'apps/api/src/routes/nodes.ts',
     owner: 'post /',
     entrypoint: 'createNodeRecord',

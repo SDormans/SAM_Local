@@ -6,6 +6,7 @@ import * as v from 'valibot';
 
 import type { Env } from '../env';
 import { type LocalPrerequisites, LocalPrerequisitesSchema } from '../schemas/local';
+import { localOffMachineHosts } from './runtime-mode';
 
 const PREREQUISITES_KEY = 'local-runtime:prerequisites';
 
@@ -15,6 +16,8 @@ export interface LocalRuntimeHealth {
   wsl2: LocalPrerequisites['wsl2'];
   dataStore: 'ready' | 'migrating' | 'recovery-required' | 'unavailable';
   message?: string;
+  /** Present only when the local API has tried to reach a host off this computer. */
+  offMachineHosts?: string[];
 }
 
 export async function writeLocalPrerequisites(
@@ -42,7 +45,9 @@ export async function readLocalPrerequisites(env: Pick<Env, 'KV'>): Promise<Loca
       };
 }
 
-async function dataStoreState(env: Pick<Env, 'DATABASE'>): Promise<LocalRuntimeHealth['dataStore']> {
+async function dataStoreState(
+  env: Pick<Env, 'DATABASE'>
+): Promise<LocalRuntimeHealth['dataStore']> {
   try {
     await env.DATABASE.prepare('SELECT 1 FROM users LIMIT 1').first();
     return 'ready';
@@ -56,6 +61,7 @@ export async function summarizeLocalHealth(
   prerequisites: LocalPrerequisites
 ): Promise<LocalRuntimeHealth> {
   const dataStore = await dataStoreState(env);
+  const offMachineHosts = localOffMachineHosts();
   const status: LocalRuntimeHealth['status'] =
     dataStore !== 'ready'
       ? 'unavailable'
@@ -68,5 +74,6 @@ export async function summarizeLocalHealth(
     wsl2: prerequisites.wsl2,
     dataStore,
     ...(prerequisites.message ? { message: prerequisites.message } : {}),
+    ...(offMachineHosts.length ? { offMachineHosts } : {}),
   };
 }

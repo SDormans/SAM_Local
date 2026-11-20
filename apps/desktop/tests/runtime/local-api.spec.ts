@@ -223,6 +223,25 @@ describe('local API runtime', () => {
     });
   });
 
+  it('registers one local node for the installation behind the bootstrap secret', async () => {
+    const base = api!.url;
+    const put = (authorization?: string) =>
+      fetch(`${base}/api/local/node`, {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          ...(authorization ? { authorization } : {}),
+        },
+        body: JSON.stringify({ vcpuCount: 4, memoryMb: 8192, diskGb: 100 }),
+      });
+    expect((await put()).status).toBe(401);
+    const first = await (await put(`Bearer ${secrets.LOCAL_BOOTSTRAP_SECRET}`)).json();
+    expect(first.nodeId).toEqual(expect.any(String));
+    expect(first.callbackToken.split('.')).toHaveLength(3);
+    const again = await (await put(`Bearer ${secrets.LOCAL_BOOTSTRAP_SECRET}`)).json();
+    expect(again.nodeId).toBe(first.nodeId);
+  });
+
   it('creates a local-folder project without cloning and rejects unsafe paths', async () => {
     const base = api!.url;
     const cookie = await login(base);

@@ -27,6 +27,10 @@ export interface LocalWranglerConfigOptions {
   apiDir: string;
   installationId: string;
   sessionTtlSeconds?: number;
+  /** Loopback port of the local node agent container. */
+  nodeAgentPort?: number;
+  /** Model OpenCode uses through the local model gateway (until per-agent selection lands). */
+  localDefaultModel?: string;
   /** Built `apps/web` output served same-origin with the API; omitted for API-only runs. */
   webDistDir?: string;
 }
@@ -74,6 +78,8 @@ export function buildLocalWranglerConfig(
     ...(options.sessionTtlSeconds
       ? { LOCAL_SESSION_TTL_SECONDS: String(options.sessionTtlSeconds) }
       : {}),
+    ...(options.nodeAgentPort ? { LOCAL_VM_AGENT_PORT: String(options.nodeAgentPort) } : {}),
+    ...(options.localDefaultModel ? { LOCAL_DEFAULT_MODEL: options.localDefaultModel } : {}),
   };
   if (options.webDistDir) {
     if (!isAbsolute(options.webDistDir)) throw new Error('webDistDir must be absolute');

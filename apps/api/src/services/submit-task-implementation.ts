@@ -27,6 +27,8 @@ import { log } from '../lib/logger';
 import { parsePositiveInt } from '../lib/route-helpers';
 import { markTaskSubmitOperation, type TaskSubmitOperation } from '../lib/task-submit-diagnostics';
 import { ulid } from '../lib/ulid';
+import { findRunningLocalNodeId } from '../local/local-node';
+import { isLocalRuntime } from '../local/runtime-mode';
 import { errors } from '../middleware/error';
 import { requireProjectCapability } from '../middleware/project-auth';
 import { requireRepositoryAccess } from '../routes/projects/_helpers';
@@ -251,11 +253,32 @@ export async function submitTaskImplementation(
     }
   }
 
+  if (!body.nodeId && isLocalRuntime(env)) {
+    // Spec 036: desktop tasks run on this computer's node; there is no cloud placement to fall back to.
+    const localNodeId = await findRunningLocalNodeId(env, userId);
+    if (!localNodeId) {
+      throw errors.badRequest(
+        'This computer is not ready to run agents. Check Docker Desktop on the SAM setup page, then try again.'
+      );
+    }
+    // OpenCode is the first local agent; an explicit agent or profile choice still wins.
+    const defaultAgent =
+      !body.agentType && !body.agentProfileId && !body.skillId
+        ? { agentType: 'opencode' as const }
+        : {};
+    body = { ...body, nodeId: localNodeId, ...defaultAgent };
+  }
+
+  let localUserOwnedNode = false;
   // Validate nodeId if provided
   if (body.nodeId) {
     setOperation('preferred_node_lookup');
     const [node] = await db
-      .select({ id: schema.nodes.id, status: schema.nodes.status })
+      .select({
+        id: schema.nodes.id,
+        status: schema.nodes.status,
+        nodeClass: schema.nodes.nodeClass,
+      })
       .from(schema.nodes)
       .where(and(eq(schema.nodes.id, body.nodeId), eq(schema.nodes.userId, userId)))
       .limit(1);
@@ -266,6 +289,8 @@ export async function submitTaskImplementation(
     if (node.status !== 'running') {
       throw errors.badRequest('Node must be in running status');
     }
+    // Spec 036: the desktop's own node needs no cloud credential (as workspace create treats it).
+    localUserOwnedNode = isLocalRuntime(env) && node.nodeClass === 'user-owned';
   }
 
   const message = fork ? body.message : body.message.trim();
@@ -437,15 +462,13 @@ export async function submitTaskImplementation(
   })();
 
   setOperation('placement_credentials');
-  const placementResolution = await resolveTaskStartPlacementCredentialAttributionFromPlacement(
-    db,
-    placement,
-    {
-      credentialsRequiredMessage:
-        'Cloud provider credentials required. Connect your account in Settings.',
-      env: env,
-    }
-  );
+  const placementResolution = localUserOwnedNode
+    ? localUserOwnedNodePlacement(userId)
+    : await resolveTaskStartPlacementCredentialAttributionFromPlacement(db, placement, {
+        credentialsRequiredMessage:
+          'Cloud provider credentials required. Connect your account in Settings.',
+        env: env,
+      });
   if ('error' in placementResolution) {
     if (placementResolution.errorKind === 'credentials') {
       throw errors.forbidden(placementResolution.error);
@@ -755,4 +778,16 @@ export async function submitTaskImplementation(
   };
 
   return response;
+}
+
+function localUserOwnedNodePlacement(userId: string) {
+  return {
+    capacityPoolSelection: null,
+    quotaCredentialSource: 'self-hosted' as const,
+    capacityPlacementSnapshot: null,
+    effectiveProvider: null,
+    credentialAttributionUserId: userId,
+    credentialAttributionProjectId: null,
+    credentialAttributionSource: 'self-hosted' as const,
+  };
 }

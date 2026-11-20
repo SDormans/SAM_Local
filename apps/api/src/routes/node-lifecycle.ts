@@ -16,6 +16,7 @@ import type { Env } from '../env';
 import { extractBearerToken } from '../lib/auth-helpers';
 import { log } from '../lib/logger';
 import { maybeJsonRecord } from '../lib/runtime-validation';
+import { isLocalRuntime } from '../local/runtime-mode';
 import { getUserId } from '../middleware/auth';
 import { errors } from '../middleware/error';
 import { requireNodeOwnership } from '../middleware/node-auth';
@@ -438,6 +439,8 @@ nodeLifecycleRoutes.post('/:id/heartbeat', jsonValidator(NodeHeartbeatSchema), a
     }
   }
 
+  // Local nodes are reached over loopback; there is no Cloudflare DNS to publish them in.
+  if (isLocalRuntime(c.env)) effectiveNodeIp = null;
   if (effectiveNodeIp) {
     const heartbeatIpv4 = isValidIPv4Address(heartbeatIp) ? heartbeatIp : null;
     const dnsIp = heartbeatIpv4 || effectiveNodeIp;

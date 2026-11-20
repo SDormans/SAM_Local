@@ -126,6 +126,8 @@ export interface Env extends WebhookTriggerEnv, TaskRecoveryEnv {
   /** Spec 036 per-installation secret held by the desktop supervisor to mint local sessions. */
   LOCAL_BOOTSTRAP_SECRET?: string;
   LOCAL_SESSION_TTL_SECONDS?: string; // Local desktop session lifetime (default: 86400)
+  LOCAL_VM_AGENT_PORT?: string; // Loopback port of the local node agent (spec 036 desktop runtime)
+  LOCAL_DEFAULT_MODEL?: string; // Model OpenCode uses through the desktop model gateway (spec 036)
   PREVIEW_BASE_DOMAIN?: string;
   PREVIEW_URL_TTL_SECONDS?: string;
   PREVIEW_SIGNING_KEY?: string;

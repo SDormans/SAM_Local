@@ -279,3 +279,8 @@ components:
           enum: [ready, migrating, recovery-required, unavailable]
         message:
           type: string
+        offMachineHosts:
+          type: array
+          description: Present only when the local API has tried to reach a host off this computer.
+          items:
+            type: string

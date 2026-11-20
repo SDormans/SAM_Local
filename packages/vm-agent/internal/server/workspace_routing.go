@@ -242,6 +242,10 @@ func (s *Server) upsertWorkspaceRuntime(workspaceID, repository, branch, status,
 		if adoptWorkspaceCallbackTokenLocked(runtime, callbackToken) {
 			adoptedCallbackToken, metadataChanged = runtime.CallbackToken, true
 		}
+		if runtime.WorkspaceDir == "" && isLocalRepoProvider(runtime.RepoProvider) {
+			runtime.WorkspaceDir = runtime.Repository
+			metadataChanged = true
+		}
 		if runtime.WorkspaceDir == "" {
 			runtime.WorkspaceDir = s.workspaceDirForRepo(workspaceID, runtime.Repository)
 			metadataChanged = true
@@ -373,11 +377,20 @@ func (s *Server) upsertWorkspaceRuntime(workspaceID, repository, branch, status,
 
 	workspaceDir := persistedWorkspaceDir
 	if workspaceDir == "" {
-		workspaceDir = s.workspaceDirForRepo(workspaceID, effectiveRepo)
+		if isLocalRepoProvider(firstNonEmpty(opt.RepoProvider, persistedRepoProvider)) {
+			// Spec 036: the user's folder is used in place (it is mounted at the same path).
+			workspaceDir = effectiveRepo
+		} else {
+			workspaceDir = s.workspaceDirForRepo(workspaceID, effectiveRepo)
+		}
 	}
 	containerLabelValue := persistedContainerLabelValue
 	if containerLabelValue == "" {
 		containerLabelValue = workspaceDir
+		if isLocalRepoProvider(firstNonEmpty(opt.RepoProvider, persistedRepoProvider)) {
+			// Several workspaces may use one local folder; each needs its own container.
+			containerLabelValue = workspaceDir + "#" + workspaceID
+		}
 	}
 	containerWorkDir := persistedContainerWorkDir
 	if containerWorkDir == "" {
