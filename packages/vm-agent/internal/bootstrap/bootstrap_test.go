@@ -3901,3 +3901,17 @@ func TestDefaultDevcontainerConfigLocalFolderWithSpacesAndQuotes(t *testing.T) {
 		t.Fatalf("workspaceMount = %q, want target %s", mount, want)
 	}
 }
+
+func TestDevcontainerUpArgsLocalFolderUsesWorkspaceIdentity(t *testing.T) {
+	cfg := &config.Config{
+		WorkspaceDir:        "/home/me/demo",
+		WorkspaceID:         "ws2",
+		RepoProvider:        "local",
+		ContainerLabelKey:   "devcontainer.local_folder",
+		ContainerLabelValue: "/home/me/demo#ws2",
+	}
+	got := strings.Join(devcontainerUpArgs(cfg, "", ""), " ")
+	if !strings.Contains(got, "--id-label devcontainer.local_folder=/home/me/demo#ws2") {
+		t.Fatalf("devcontainerUpArgs = %q, want the per-workspace identity label", got)
+	}
+}

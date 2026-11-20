@@ -1245,8 +1245,9 @@ func fallbackToDefaultDevcontainer(
 func devcontainerUpArgs(cfg *config.Config, overrideConfigPath, devcontainerConfigName string) []string {
 	args := []string{"up", "--workspace-folder", cfg.WorkspaceDir}
 
-	if len(cfg.ExtraContainerLabels) > 0 {
+	if len(cfg.ExtraContainerLabels) > 0 || isLocalRepoProvider(cfg.RepoProvider) {
 		// --id-label replaces the CLI's default identity labels, so keep the lookup label too.
+		// Local folders need it even without extra labels: their lookup value is per workspace.
 		args = append(args, "--id-label", cfg.ContainerLabelKey+"="+cfg.ContainerLabelValue)
 		for _, label := range cfg.ExtraContainerLabels {
 			args = append(args, "--id-label", label)

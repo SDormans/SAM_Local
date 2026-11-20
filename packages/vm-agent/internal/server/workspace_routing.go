@@ -387,6 +387,10 @@ func (s *Server) upsertWorkspaceRuntime(workspaceID, repository, branch, status,
 	containerLabelValue := persistedContainerLabelValue
 	if containerLabelValue == "" {
 		containerLabelValue = workspaceDir
+		if isLocalRepoProvider(firstNonEmpty(opt.RepoProvider, persistedRepoProvider)) {
+			// Several workspaces may use one local folder; each needs its own container.
+			containerLabelValue = workspaceDir + "#" + workspaceID
+		}
 	}
 	containerWorkDir := persistedContainerWorkDir
 	if containerWorkDir == "" {

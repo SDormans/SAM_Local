@@ -67,13 +67,14 @@ describe.runIf(imageAvailable())('local node agent', () => {
       'ps',
       '-a',
       '--filter',
-      `label=devcontainer.local_folder=${join(root, 'demo')}`,
+      'label=devcontainer.local_folder',
       '--format',
-      '{{.ID}}',
+      '{{.Label "devcontainer.local_folder"}}',
     ])
       .toString()
-      .trim();
-    expect(stray).toBe('');
+      .split('\n')
+      .filter((folder) => folder.startsWith(root));
+    expect(stray).toEqual([]);
     await api?.stop();
     await rm(root, { recursive: true, force: true });
   });
