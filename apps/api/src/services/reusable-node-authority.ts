@@ -1,11 +1,16 @@
 import type { CapacityPlacementSnapshot } from '@simple-agent-manager/shared';
 
 import { D1_MAX_BOUND_PARAMETERS } from '../lib/d1-limits';
-import { buildPlacementAuthoritySqlPredicate } from './placement-authority';
+import {
+  buildPlacementAuthoritySqlPredicate,
+  type PlacementAuthorityNodeClass,
+} from './placement-authority';
 
 export interface ReusableNodeAuthoritySelection {
   nodeId: string;
   capacityPlacementSnapshot: CapacityPlacementSnapshot | null;
+  /** Defaults to 'managed'; only the local desktop runtime reuses user-owned nodes for tasks. */
+  nodeClass?: PlacementAuthorityNodeClass;
 }
 
 /**
@@ -24,7 +29,7 @@ export async function filterReusableNodesByCurrentAuthority(
 ): Promise<Set<string>> {
   const groups = new Map<string, ReusableNodeAuthoritySelection[]>();
   for (const selection of input.selections) {
-    const key = JSON.stringify(selection.capacityPlacementSnapshot);
+    const key = JSON.stringify([selection.nodeClass ?? null, selection.capacityPlacementSnapshot]);
     const group = groups.get(key) ?? [];
     group.push(selection);
     groups.set(key, group);
@@ -40,6 +45,7 @@ export async function filterReusableNodesByCurrentAuthority(
       nodeRole: 'workspace',
       workloadRole: 'workspace',
       capacityPlacementSnapshot: first.capacityPlacementSnapshot,
+      nodeClass: first.nodeClass,
     });
     const chunkSize = D1_MAX_BOUND_PARAMETERS - predicate.binds.length;
     if (chunkSize <= 0) throw new Error('Placement authority exceeds D1 parameter limit');

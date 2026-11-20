@@ -10,6 +10,8 @@ import { join, resolve } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+const MODEL = process.env.SAM_TEST_OLLAMA_MODEL ?? 'qwen2.5:0.5b';
+
 import {
   applyLocalMigrations,
   type RunningLocalApi,
@@ -44,6 +46,8 @@ let api: RunningLocalApi | undefined;
 let node: LocalNode | undefined;
 let nodeId = '';
 let sessionCookie = '';
+let localProjectId = '';
+let localNodeId = '';
 
 describe.runIf(imageAvailable())('local node agent', () => {
   beforeAll(async () => {
@@ -51,7 +55,15 @@ describe.runIf(imageAvailable())('local node agent', () => {
     const store = new LocalDataStore(root);
     const installation = await store.init();
     secrets = await loadOrCreateRuntimeSecrets(join(store.runtimeDir, 'secrets.json'));
-    const runtime = { apiDir, store, installation, secrets, port: PORT, nodeAgentPort: NODE_PORT };
+    const runtime = {
+      apiDir,
+      store,
+      installation,
+      secrets,
+      port: PORT,
+      nodeAgentPort: NODE_PORT,
+      localDefaultModel: MODEL,
+    };
     const configPath = await writeLocalRuntimeFiles(runtime);
     const target = await latestMigrationVersion(join(apiDir, 'src/db/migrations'));
     await store.upgrade(target, () => applyLocalMigrations(runtime, configPath));
@@ -123,6 +135,8 @@ describe.runIf(imageAvailable())('local node agent', () => {
     });
     expect(project.status).toBe(201);
     const { id: projectId } = await project.json();
+    localProjectId = projectId;
+    localNodeId = nodeId;
     const created = await fetch(`${api!.url}/api/workspaces`, {
       method: 'POST',
       headers,
@@ -140,5 +154,55 @@ describe.runIf(imageAvailable())('local node agent', () => {
       await new Promise((r) => setTimeout(r, 2000));
     }
     expect(ws, JSON.stringify(ws)).toMatchObject({ status: 'running' });
+  });
+
+  it('runs an OpenCode task on the local model through the SAM gateway', async () => {
+    const headers = { cookie: sessionCookie, 'content-type': 'application/json' };
+    for (let i = 0; i < 45; i++) {
+      const res = await fetch(`${api!.url}/api/nodes/${localNodeId}`, { headers });
+      if (res.ok && (await res.json()).lastMetrics) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    const submitted = await fetch(`${api!.url}/api/projects/${localProjectId}/tasks/submit`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        message: 'Reply with the single word: pong',
+        nodeId: localNodeId,
+        agentType: 'opencode',
+        taskMode: 'conversation',
+      }),
+    });
+    const submittedBody = await submitted.text();
+    expect(submitted.status, submittedBody).toBeLessThan(300);
+    const { taskId, sessionId } = JSON.parse(submittedBody) as {
+      taskId: string;
+      sessionId: string;
+    };
+
+    let transcript = '';
+    let task: { status?: string; errorMessage?: string | null } = {};
+    for (let i = 0; i < 180; i++) {
+      const messages = await fetch(
+        `${api!.url}/api/projects/${localProjectId}/sessions/${sessionId}/messages`,
+        { headers }
+      );
+      if (messages.ok) transcript = await messages.text();
+      if (transcript.includes('"role":"assistant"')) break;
+      const taskRes = await fetch(`${api!.url}/api/projects/${localProjectId}/tasks/${taskId}`, {
+        headers,
+      });
+      if (taskRes.ok) task = await taskRes.json();
+      if (task.status === 'failed') break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    const node = await (await fetch(`${api!.url}/api/nodes/${localNodeId}`, { headers })).text();
+    const nodeLogs = execFileSync('sh', [
+      '-c',
+      'docker logs --tail 60 $(docker ps -aq --filter label=sam.role=node | head -1) 2>&1 | grep -iE "heartbeat|metric|error" | tail -20',
+    ]).toString();
+    expect(transcript, `${task.errorMessage ?? task.status}\n${node}\n${nodeLogs}`).toContain(
+      '"role":"assistant"'
+    );
   });
 });

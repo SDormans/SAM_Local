@@ -18,6 +18,8 @@ import {
   LOCAL_MODEL_CONNECTION_ID,
 } from './workspace-token-authorizer.js';
 
+const LOCAL_NODE_HEARTBEAT_INTERVAL = '15s';
+
 export const NODE_AGENT_CONTAINER_PORT = 8443;
 export const DEFAULT_LOCAL_NODE_IMAGE = 'sam-local-node:dev';
 export const DEFAULT_MODEL_SERVICE_URL = 'http://127.0.0.1:11434';
@@ -131,6 +133,8 @@ export class LocalNode {
       env: {
         CONTROL_PLANE_URL: `http://${placement.containerHost}:${relayPort}`,
         NODE_ID: nodeId,
+        // Fresh telemetry is required to admit work onto an occupied node.
+        HEARTBEAT_INTERVAL: LOCAL_NODE_HEARTBEAT_INTERVAL,
         CALLBACK_TOKEN: callbackToken,
         LOCAL_PROJECTS_ROOT: options.projectsRoot,
         VM_AGENT_PORT: String(NODE_AGENT_CONTAINER_PORT),
