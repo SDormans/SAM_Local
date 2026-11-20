@@ -55,9 +55,15 @@ export function normalizeLocalProjectPath(input: string | undefined): string {
   return posix.length > 1 ? posix.replace(/\/$/, '') : posix;
 }
 
-/** Comparison key for a normalized local path: Windows paths are case-insensitive. */
+/** Comparison key for a stored or normalized local path: Windows paths are case-insensitive. */
 export function localProjectPathKey(normalizedPath: string): string {
-  return WINDOWS_ABSOLUTE_PATH.test(normalizedPath) ? normalizedPath.toLowerCase() : normalizedPath;
+  if (WINDOWS_ABSOLUTE_PATH.test(normalizedPath)) {
+    return normalizedPath
+      .replace(/[\\/]+/g, '\\')
+      .replace(/(.{3,})\\$/, '$1')
+      .toLowerCase();
+  }
+  return normalizedPath.replace(/\/+/g, '/').replace(/(.+)\/$/, '$1');
 }
 
 export function registerProjectCreateRoute(crudRoutes: Hono<{ Bindings: Env }>): void {

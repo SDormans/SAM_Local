@@ -81,6 +81,9 @@ describe('normalizeLocalProjectPath', () => {
       localProjectPathKey(normalizeLocalProjectPath('c:/code/demo'))
     );
     expect(localProjectPathKey('/home/Me')).not.toBe(localProjectPathKey('/home/me'));
+    // Rows saved before separator normalization still match.
+    expect(localProjectPathKey('D:/work//app/')).toBe(localProjectPathKey('D:\\work\\app'));
+    expect(localProjectPathKey('/home//me/app/')).toBe('/home/me/app');
     expect(normalizeLocalProjectPath(' /home/me/app/ ')).toBe('/home/me/app');
     expect(normalizeLocalProjectPath('C:\\')).toBe('C:\\');
     expect(normalizeLocalProjectPath('/')).toBe('/');
