@@ -163,6 +163,7 @@ describe.runIf(imageAvailable())('local node agent', () => {
       if (res.ok && (await res.json()).lastMetrics) break;
       await new Promise((r) => setTimeout(r, 2000));
     }
+    const submittedAt = Date.now();
     const submitted = await fetch(`${api!.url}/api/projects/${localProjectId}/tasks/submit`, {
       method: 'POST',
       headers,
@@ -204,5 +205,12 @@ describe.runIf(imageAvailable())('local node agent', () => {
     expect(transcript, `${task.errorMessage ?? task.status}\n${node}\n${nodeLogs}`).toContain(
       '"role":"assistant"'
     );
+    // The reply came from the host-local Ollama model, reached only through SAM's gateway.
+    const ps = (await (await fetch('http://127.0.0.1:11434/api/ps')).json()) as {
+      models: { name: string; expires_at: string }[];
+    };
+    const loaded = ps.models.find((m) => m.name === MODEL);
+    expect(loaded, JSON.stringify(ps)).toBeDefined();
+    expect(Date.parse(loaded!.expires_at)).toBeGreaterThan(submittedAt);
   });
 });
